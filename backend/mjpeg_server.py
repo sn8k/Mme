@@ -4,7 +4,7 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.0
+Version: 0.9.1
 """
 
 import asyncio
@@ -1014,6 +1014,9 @@ class MJPEGServer:
             - backend: Video capture backend name
             - error: Error message if detection failed
         """
+        import platform
+        import subprocess
+        
         result = {
             "supported_resolutions": [],
             "current_resolution": None,
@@ -1021,6 +1024,12 @@ class MJPEGServer:
             "backend": "unknown",
             "error": None
         }
+        
+        # On Linux, try v4l2-ctl first (works even if device is busy)
+        if platform.system().lower() == "linux" and not device_path.isdigit():
+            v4l2_result = self._detect_v4l2_resolutions(device_path)
+            if v4l2_result["supported_resolutions"]:
+                return v4l2_result
         
         if not OPENCV_AVAILABLE:
             result["error"] = "OpenCV not available"
@@ -1099,6 +1108,100 @@ class MJPEGServer:
         except Exception as e:
             result["error"] = str(e)
             logger.error("Failed to detect camera capabilities for %s: %s", device_path, e)
+        
+        return result
+    
+    def _detect_v4l2_resolutions(self, device_path: str) -> Dict:
+        """Detect resolutions using v4l2-ctl (Linux only).
+        
+        This method works even when the camera device is busy/in use.
+        
+        Args:
+            device_path: Device path (e.g., /dev/video0).
+            
+        Returns:
+            Dictionary with detected capabilities.
+        """
+        import subprocess
+        import re
+        
+        result = {
+            "supported_resolutions": [],
+            "current_resolution": None,
+            "max_fps": 30,
+            "backend": "V4L2",
+            "error": None
+        }
+        
+        try:
+            # Get supported frame sizes for MJPEG and YUYV formats
+            cmd_result = subprocess.run(
+                ["v4l2-ctl", "-d", device_path, "--list-framesizes=mjpeg"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            output = cmd_result.stdout
+            
+            # If MJPEG not available, try YUYV
+            if not output.strip() or cmd_result.returncode != 0:
+                cmd_result = subprocess.run(
+                    ["v4l2-ctl", "-d", device_path, "--list-framesizes=yuyv"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                output = cmd_result.stdout
+            
+            # Parse discrete sizes: "Size: Discrete 640x480"
+            discrete_pattern = r'Size:\s+Discrete\s+(\d+)x(\d+)'
+            resolutions = []
+            
+            for match in re.finditer(discrete_pattern, output):
+                width, height = int(match.group(1)), int(match.group(2))
+                res = f"{width}x{height}"
+                if res not in resolutions:
+                    resolutions.append(res)
+            
+            # Parse stepwise sizes if no discrete sizes found
+            # "Size: Stepwise 160x120 - 1920x1080 with step 8/8"
+            if not resolutions:
+                stepwise_pattern = r'Size:\s+Stepwise\s+(\d+)x(\d+)\s+-\s+(\d+)x(\d+)'
+                match = re.search(stepwise_pattern, output)
+                if match:
+                    min_w, min_h = int(match.group(1)), int(match.group(2))
+                    max_w, max_h = int(match.group(3)), int(match.group(4))
+                    
+                    # Add common resolutions within the range
+                    common = [
+                        (320, 240), (640, 480), (800, 600),
+                        (1024, 768), (1280, 720), (1280, 960),
+                        (1920, 1080), (2560, 1440), (3840, 2160)
+                    ]
+                    for w, h in common:
+                        if min_w <= w <= max_w and min_h <= h <= max_h:
+                            resolutions.append(f"{w}x{h}")
+            
+            if resolutions:
+                # Sort by resolution
+                def res_key(res):
+                    w, h = map(int, res.split('x'))
+                    return w * h
+                
+                result["supported_resolutions"] = sorted(resolutions, key=res_key)
+                logger.info("V4L2 detected resolutions for %s: %s", 
+                           device_path, result["supported_resolutions"])
+            
+        except FileNotFoundError:
+            logger.debug("v4l2-ctl not found")
+            result["error"] = "v4l2-ctl not installed"
+        except subprocess.TimeoutExpired:
+            logger.warning("v4l2-ctl timed out for %s", device_path)
+            result["error"] = "v4l2-ctl timed out"
+        except Exception as e:
+            logger.debug("V4L2 resolution detection failed for %s: %s", device_path, e)
+            result["error"] = str(e)
         
         return result
 

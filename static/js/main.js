@@ -1,4 +1,4 @@
-/* File Version: 0.33.1 */
+/* File Version: 0.33.2 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -635,11 +635,135 @@
                 applyDependVisibility();
                 captureInitialValues();
                 bindDynamicInputs();
+                
+                // Auto-detect resolutions and controls after config is loaded
+                autoDetectCameraCapabilities();
             })
             .catch((error) => {
                 motionFrontendUI.showToast(`Camera config error: ${error.message}`, 'error');
             })
             .finally(() => motionFrontendUI.setStatus('Ready'));
+    }
+    
+    /**
+     * Auto-detect camera resolutions and controls when config is loaded.
+     */
+    async function autoDetectCameraCapabilities() {
+        const deviceInput = document.getElementById('deviceUrlEntry');
+        if (!deviceInput || !deviceInput.value) {
+            return; // No device configured, skip auto-detection
+        }
+        
+        const devicePath = deviceInput.value;
+        
+        // Auto-detect resolutions (silent, no toast unless error)
+        await autoDetectResolutions(devicePath);
+        
+        // Auto-detect controls (silent, no toast unless error)
+        await autoDetectControls(devicePath);
+    }
+    
+    /**
+     * Auto-detect resolutions for a device (silent mode).
+     */
+    async function autoDetectResolutions(devicePath) {
+        const resolutionSelect = document.getElementById('resolutionSelect');
+        if (!resolutionSelect) return;
+        
+        try {
+            const encodedPath = encodeURIComponent(devicePath);
+            const data = await apiGet(`/api/cameras/capabilities/${encodedPath}`);
+            
+            if (data.error) {
+                console.debug('Resolution detection error:', data.error);
+                return;
+            }
+            
+            const resolutions = data.supported_resolutions || [];
+            if (resolutions.length === 0) {
+                return; // No resolutions detected, keep defaults
+            }
+            
+            // Keep current value
+            const currentValue = resolutionSelect.value;
+            
+            // Resolution labels mapping
+            const resLabels = {
+                '320x240': 'QVGA',
+                '352x288': 'CIF',
+                '640x360': 'nHD',
+                '640x480': 'VGA',
+                '800x600': 'SVGA',
+                '960x540': 'qHD',
+                '1024x576': 'WSVGA',
+                '1024x768': 'XGA',
+                '1280x720': '720p HD',
+                '1280x960': 'SXGA-',
+                '1280x1024': 'SXGA',
+                '1600x900': 'HD+',
+                '1920x1080': '1080p Full HD',
+                '2560x1440': 'QHD 2K',
+                '3840x2160': '4K UHD',
+            };
+            
+            // Update dropdown with detected resolutions
+            resolutionSelect.innerHTML = resolutions.map(res => {
+                const label = resLabels[res] ? `${res} (${resLabels[res]})` : res;
+                const selected = res === currentValue ? 'selected' : '';
+                return `<option value="${res}" ${selected}>${label}</option>`;
+            }).join('');
+            
+            // If current value not in list, add it at the beginning
+            if (currentValue && !resolutions.includes(currentValue)) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = currentValue + ' (actuel)';
+                opt.selected = true;
+                resolutionSelect.insertBefore(opt, resolutionSelect.firstChild);
+            }
+            
+            console.log(`Auto-detected ${resolutions.length} resolutions for ${devicePath}`);
+            
+        } catch (error) {
+            console.debug('Auto-detection of resolutions failed:', error.message);
+        }
+    }
+    
+    /**
+     * Auto-detect controls for a device (silent mode).
+     */
+    async function autoDetectControls(devicePath) {
+        const controlsContainer = document.getElementById('cameraControlsContainer');
+        if (!controlsContainer) return;
+        
+        try {
+            const encodedPath = encodeURIComponent(devicePath);
+            const data = await apiGet(`/api/cameras/controls/${encodedPath}`);
+            
+            const controls = data.controls || [];
+            
+            if (controls.length === 0) {
+                controlsContainer.innerHTML = `
+                    <tr class="settings-item">
+                        <td colspan="2" class="no-controls">
+                            <em>Aucun contrôle disponible pour ce périphérique</em>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Render detected controls
+            controlsContainer.innerHTML = controls.map(ctrl => renderCameraControl(ctrl, devicePath)).join('');
+            
+            // Bind event handlers for controls
+            bindCameraControlHandlers(devicePath);
+            
+            console.log(`Auto-detected ${controls.length} controls for ${devicePath}`);
+            
+        } catch (error) {
+            console.debug('Auto-detection of controls failed:', error.message);
+        }
     }
 
     function renderCameraConfigSections(container, sections) {
@@ -810,17 +934,27 @@
             }
         });
         
-        // Bind resolution detection button
-        const detectResBtn = document.getElementById('detectResolutionsBtn');
-        if (detectResBtn) {
-            detectResBtn.addEventListener('click', () => detectCameraResolutions());
-        }
-        
-        // Bind camera controls detection button  
-        const detectControlsBtn = document.getElementById('detectCameraControlsBtn');
-        if (detectControlsBtn) {
-            detectControlsBtn.addEventListener('click', () => detectCameraControls());
-        }
+        // Note: Detection buttons use event delegation (see initCameraDetectionButtons)
+    }
+    
+    /**
+     * Initialize camera detection buttons with event delegation.
+     * This is called once at startup and handles dynamically rendered buttons.
+     */
+    function initCameraDetectionButtons() {
+        document.addEventListener('click', (e) => {
+            // Resolution detection button
+            if (e.target.matches('#detectResolutionsBtn') || e.target.closest('#detectResolutionsBtn')) {
+                e.preventDefault();
+                detectCameraResolutions();
+            }
+            
+            // Camera controls detection button
+            if (e.target.matches('#detectCameraControlsBtn') || e.target.closest('#detectCameraControlsBtn')) {
+                e.preventDefault();
+                detectCameraControls();
+            }
+        });
     }
     
     /**
@@ -2432,6 +2566,9 @@
         
         // Initialize service control buttons after DOM is ready
         setTimeout(initServiceControls, 600);
+        
+        // Initialize camera detection buttons (event delegation)
+        initCameraDetectionButtons();
         
         // Check for updates asynchronously (after config loaded)
         setTimeout(checkUpdateStatus, 2000);

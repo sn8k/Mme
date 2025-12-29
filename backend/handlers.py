@@ -1,4 +1,4 @@
-# File Version: 0.26.0
+# File Version: 0.26.1
 from __future__ import annotations
 
 import base64
@@ -507,10 +507,13 @@ class CameraControlsHandler(BaseHandler):
         device_path = urllib.parse.unquote(device_path)
         controls = camera_detector.detect_camera_controls(device_path)
         
+        # Convert CameraControl dataclasses to dictionaries for JSON serialization
+        controls_dicts = [ctrl.to_dict() for ctrl in controls]
+        
         self.write_json({
             "device": device_path,
-            "controls": controls,
-            "count": len(controls),
+            "controls": controls_dicts,
+            "count": len(controls_dicts),
         })
     
     async def post(self, device_path: str) -> None:

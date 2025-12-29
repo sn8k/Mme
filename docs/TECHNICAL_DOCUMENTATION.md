@@ -263,21 +263,25 @@ Utilitaires globaux :
 - `motionFrontendUI.setStatus(message)` : mise à jour status bar
 - `motionFrontendUI.showToast(message, type)` : notifications toast
 
-#### `main.js` (v0.5.0)
+#### `main.js` (v0.33.2)
 Logique principale :
 - Gestion état (`state.cameraId`, `state.isDirty`, etc.)
 - API fetch avec credentials
 - Toggle sidebar/theme
 - Dirty tracking (bouton sauvegarde conditionnel)
 - Grille preview dynamique
+- **Auto-détection caméra** : détecte automatiquement les résolutions et contrôles au chargement de la config
 
 ```javascript
 // Fonctions principales
-loadMainConfig()        // Charge config générale
-loadCameraConfig(id)    // Charge config caméra
-pushConfigs(payload)    // Sauvegarde configuration
-updatePreviewGrid()     // Met à jour grille previews
-checkDirty()           // Vérifie modifications
+loadMainConfig()                    // Charge config générale
+loadCameraConfig(id)                // Charge config caméra
+pushConfigs(payload)                // Sauvegarde configuration
+updatePreviewGrid()                 // Met à jour grille previews
+checkDirty()                        // Vérifie modifications
+autoDetectCameraCapabilities()      // Auto-détection résolutions et contrôles
+detectCameraResolutions()           // Détection manuelle résolutions
+detectCameraControls()              // Détection manuelle contrôles
 ```
 
 ---
@@ -564,6 +568,12 @@ GET /api/cameras/detect/?include_filtered=true
 **Plateformes supportées** :
 - **Windows** : DirectShow via WMI/PowerShell, fallback ffmpeg ou OpenCV
 - **Linux** : v4l2 via `v4l2-ctl`, fallback scan `/dev/video*`
+
+> **Note** : Sur Linux, le paquet `v4l-utils` doit être installé pour la détection complète :
+> ```bash
+> sudo apt install v4l-utils
+> ```
+> La détection via v4l2-ctl fonctionne même lorsque la caméra est en cours d'utilisation (streaming actif).
 
 **Types de sources** (`source_type`) :
 - `dshow` : DirectShow (Windows)
@@ -1669,20 +1679,22 @@ Chaque fichier possède un numéro de version au format `X.Y.Z` :
 
 | Fichier | Version |
 |---------|---------|
-| `backend/config_store.py` | 0.17.0 |
-| `backend/handlers.py` | 0.15.0 |
+| `backend/config_store.py` | 0.26.0 |
+| `backend/handlers.py` | 0.26.1 |
 | `backend/jinja.py` | 0.1.3 |
-| `backend/mjpeg_server.py` | 0.7.0 |
-| `backend/server.py` | 0.1.0 |
+| `backend/mjpeg_server.py` | 0.9.1 |
+| `backend/server.py` | 0.18.0 |
 | `backend/settings.py` | 0.1.0 |
+| `backend/camera_detector.py` | 0.2.0 |
+| `backend/system_info.py` | 0.2.0 |
 | `templates/base.html` | 0.2.0 |
 | `templates/login.html` | 0.2.0 |
 | `templates/main.html` | 0.4.2 |
-| `static/css/ui.css` | 0.2.2 |
-| `static/css/main.css` | 0.3.1 |
+| `static/css/ui.css` | 0.3.1 |
+| `static/css/main.css` | 0.24.0 |
 | `static/css/login.css` | 0.2.0 |
 | `static/js/ui.js` | 0.2.1 |
-| `static/js/main.js` | 0.24.0 |
+| `static/js/main.js` | 0.33.2 |
 
 ---
 

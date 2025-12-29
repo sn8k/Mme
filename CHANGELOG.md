@@ -1,5 +1,24 @@
-<!-- File Version: 0.35.1 -->
+<!-- File Version: 0.35.2 -->
 # Changelog
+
+## 0.35.2 - 2025-12-29
+### Camera Detection Fixes
+- **FIXED**: Camera controls detection now properly serializes CameraControl dataclasses to JSON dictionaries.
+- **IMPROVED**: Resolution detection on Linux now uses `v4l2-ctl --list-framesizes` first (works even when camera is in use).
+- **IMPROVED**: Resolution detection falls back to OpenCV method if v4l2-ctl is not available or fails.
+- **NEW**: Auto-detection of camera capabilities (resolutions & controls) when camera config is loaded.
+- **NEW**: Event delegation for camera detection buttons (handles dynamically rendered elements).
+
+### Technical Changes
+- `CameraControlsHandler.get()` now converts `CameraControl` objects to dictionaries using `to_dict()`.
+- `MJPEGServer.detect_camera_capabilities()` now tries V4L2 detection first on Linux before OpenCV.
+- `MJPEGServer._detect_v4l2_resolutions()` new method for Linux-specific resolution detection via v4l2-ctl.
+
+### File Version Updates
+- handlers.py: v0.26.0 → v0.26.1
+- mjpeg_server.py: v0.9.0 → v0.9.1
+- main.js: v0.33.1 → v0.33.2
+- CHANGELOG.md: v0.35.1 → v0.35.2
 
 ## 0.35.1 - 2025-12-29
 ### Bug Fixes
