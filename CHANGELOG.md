@@ -1,5 +1,23 @@
-<!-- File Version: 0.35.9 -->
+<!-- File Version: 0.36.0 -->
 # Changelog
+
+## 0.36.0 - 2025-12-29
+### Automatic Post-Update Repair
+- **NEW**: After UI-triggered updates, the installer repair runs automatically on Linux.
+- **NEW**: Ensures dependencies (MediaMTX, system packages, etc.) are always up-to-date after updates.
+- **NEW**: Full repair logging in application logs for visibility and troubleshooting.
+- **NEW**: `run_repair()` function in updater.py for automated post-update maintenance.
+
+### Technical Changes
+- `backend/updater.py`: Added `run_repair()` function to run installer in repair mode.
+- `backend/updater.py`: `perform_update()` now calls `run_repair()` after pip install.
+- `backend/updater.py`: `perform_source_update()` now calls `run_repair()` after pip install.
+- Repair runs asynchronously (thread executor) to not block the update process.
+- All repair output logged with `[REPAIR]` prefix for easy filtering.
+
+### File Version Updates
+- updater.py: v1.1.0 → v1.2.0
+- CHANGELOG.md: v0.35.9 → v0.36.0
 
 ## 0.35.9 - 2025-12-29
 ### MediaMTX Integration (Turnkey RTSP Solution)

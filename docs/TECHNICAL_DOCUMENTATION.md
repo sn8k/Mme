@@ -65,10 +65,10 @@ MmE/
 │   ├── jinja.py               # Configuration Jinja2 (v0.1.3)
 │   ├── meeting_service.py     # Service Meeting API heartbeat (v0.4.0)
 │   ├── mjpeg_server.py        # Serveur MJPEG streaming dédié (v0.9.0)
-│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.3.0)
+│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.4.1)
 │   ├── server.py              # Point d'entrée serveur (v0.15.0)
 │   ├── settings.py            # Paramètres serveur (v0.1.0)
-│   ├── updater.py             # Module de mise à jour GitHub (v1.0.0)
+│   ├── updater.py             # Module de mise à jour GitHub (v1.2.0)
 │   └── user_manager.py        # Gestion utilisateurs bcrypt (v0.1.0)
 │
 ├── config/                     # Fichiers de configuration persistés
@@ -1029,7 +1029,38 @@ POST /api/update/
 4. Crée une sauvegarde automatique dans `backups/`
 5. Extrait et applique les fichiers (sauf `config/` pour préserver les paramètres utilisateur)
 6. Exécute `pip install -r requirements.txt` pour les nouvelles dépendances
-7. Nécessite un redémarrage du serveur pour appliquer les changements
+7. **[Linux uniquement]** Exécute automatiquement le script d'installation en mode repair
+8. Nécessite un redémarrage du serveur pour appliquer les changements
+
+**Repair automatique post-update (Linux)** :
+
+Après chaque mise à jour via l'interface web (release ou source), le système exécute automatiquement le script d'installation en mode repair sur Linux. Cette fonctionnalité garantit que :
+
+- **MediaMTX** est installé et à jour (serveur RTSP)
+- **Dépendances système** sont vérifiées (Python 3.13+, pip, ffmpeg, motion, etc.)
+- **Permissions** sont correctement configurées
+- **Service systemd** est actif et fonctionnel
+- **Configuration** est cohérente avec les nouvelles fonctionnalités
+
+**Commande exécutée** :
+```bash
+bash /chemin/vers/scripts/install_motion_frontend.sh --repair
+```
+
+**Logging du repair** :
+Toute la sortie du repair est enregistrée dans les logs de l'application avec le préfixe `[REPAIR]` pour faciliter le filtrage :
+```
+[REPAIR] Checking Python environment...
+[REPAIR] Checking dependencies...
+[REPAIR] Checking MediaMTX installation...
+[REPAIR] All checks passed!
+```
+
+**Comportement** :
+- Sur **Windows** : Le repair est ignoré (message "Repair skipped (not Linux)")
+- Sur **Linux** : Le repair s'exécute automatiquement avec un timeout de 10 minutes
+- En cas d'échec : Un warning est loggé mais la mise à jour est considérée réussie
+- Le message de succès inclut le résultat du repair
 
 **Gestion du redémarrage serveur** :
 

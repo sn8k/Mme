@@ -1,4 +1,4 @@
-# File Version: 1.1.0
+# File Version: 1.2.0
 """
 GitHub Update Module for Motion Frontend.
 
@@ -8,6 +8,9 @@ download and apply new versions of the application.
 Supports two update modes:
 - Release updates: From official GitHub releases (stable)
 - Source updates: From the main branch (development/latest)
+
+After update, automatically runs the installer repair mode on Linux
+to ensure all dependencies (MediaMTX, etc.) are properly installed.
 
 Repository: https://github.com/sn8k/Mme
 """
@@ -531,6 +534,72 @@ def install_requirements() -> bool:
         return False
 
 
+def run_repair() -> Tuple[bool, str]:
+    """
+    Run the installer repair script on Linux to fix dependencies.
+    
+    This function runs the install_motion_frontend.sh script in repair mode
+    to ensure all dependencies (MediaMTX, system packages, etc.) are installed.
+    Only runs on Linux (Raspberry Pi OS).
+    
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    if platform.system() != "Linux":
+        logger.info("Repair skipped: not running on Linux")
+        return True, "Repair skipped (not Linux)"
+    
+    installer_path = PROJECT_ROOT / "scripts" / "install_motion_frontend.sh"
+    
+    if not installer_path.exists():
+        logger.warning("Installer script not found: %s", installer_path)
+        return False, f"Installer script not found: {installer_path}"
+    
+    try:
+        logger.info("=" * 60)
+        logger.info("POST-UPDATE REPAIR: Starting automatic repair...")
+        logger.info("Running: %s --repair", installer_path)
+        logger.info("=" * 60)
+        
+        # Run the repair script
+        result = subprocess.run(
+            ["bash", str(installer_path), "--repair"],
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minutes timeout
+            cwd=str(PROJECT_ROOT)
+        )
+        
+        # Log the output
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    logger.info("[REPAIR] %s", line)
+        
+        if result.stderr:
+            for line in result.stderr.strip().split('\n'):
+                if line.strip():
+                    logger.warning("[REPAIR STDERR] %s", line)
+        
+        if result.returncode == 0:
+            logger.info("=" * 60)
+            logger.info("POST-UPDATE REPAIR: Completed successfully")
+            logger.info("=" * 60)
+            return True, "Repair completed successfully"
+        else:
+            logger.error("=" * 60)
+            logger.error("POST-UPDATE REPAIR: Failed with exit code %d", result.returncode)
+            logger.error("=" * 60)
+            return False, f"Repair failed with exit code {result.returncode}"
+            
+    except subprocess.TimeoutExpired:
+        logger.error("POST-UPDATE REPAIR: Timed out after 10 minutes")
+        return False, "Repair timed out"
+    except Exception as e:
+        logger.exception("POST-UPDATE REPAIR: Unexpected error")
+        return False, f"Repair error: {str(e)}"
+
+
 async def perform_update(include_prereleases: bool = False, auto_restart: bool = False) -> UpdateResult:
     """
     Perform a full update from GitHub.
@@ -632,9 +701,14 @@ async def perform_update(include_prereleases: bool = False, auto_restart: bool =
         if not pip_success:
             logger.warning("pip install failed, but files were updated")
         
+        # Run repair on Linux to ensure dependencies are installed (MediaMTX, etc.)
+        repair_success, repair_message = await loop.run_in_executor(None, run_repair)
+        if not repair_success:
+            logger.warning("Post-update repair encountered issues: %s", repair_message)
+        
         return UpdateResult(
             success=True,
-            message=f"Successfully updated from {current_version} to {new_version}. Please restart the server.",
+            message=f"Successfully updated from {current_version} to {new_version}. {repair_message}. Please restart the server.",
             old_version=current_version,
             new_version=new_version,
             requires_restart=True,
@@ -926,12 +1000,17 @@ async def perform_source_update(branch: str = GITHUB_DEFAULT_BRANCH) -> UpdateRe
         if not pip_success:
             logger.warning("pip install failed, but files were updated")
         
+        # Run repair on Linux to ensure dependencies are installed (MediaMTX, etc.)
+        repair_success, repair_message = await loop.run_in_executor(None, run_repair)
+        if not repair_success:
+            logger.warning("Post-update repair encountered issues: %s", repair_message)
+        
         # Get new version after update
         new_version = get_current_version()
         
         return UpdateResult(
             success=True,
-            message=f"Successfully updated from source ({branch}@{source_info.commit_sha}). Please restart the server.",
+            message=f"Successfully updated from source ({branch}@{source_info.commit_sha}). {repair_message}. Please restart the server.",
             old_version=current_version,
             new_version=new_version,
             requires_restart=True,
