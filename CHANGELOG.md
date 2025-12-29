@@ -1,5 +1,37 @@
-<!-- File Version: 0.34.0 -->
+<!-- File Version: 0.35.0 -->
 # Changelog
+
+## 0.35.0 - 2025-12-29
+### General Settings Improvements
+- **NEW**: Motion version detection (via `motion -h` or `motion --version`).
+- **NEW**: FFmpeg version detection and display in General Settings.
+- **NEW**: `system_info.py` module for detecting system software versions.
+- **NEW**: Async update status check - displays source/release updates available in settings.
+- **CHANGED**: Update status field shows: "🔧 Source disponible" (priority) or "📦 X.Y.Z disponible".
+
+### System Controls
+- **NEW**: "Redémarrer le service" button with confirmation modal (Linux systemd only).
+- **NEW**: `ServiceRestartHandler` endpoint (`POST /api/service/restart/`).
+- **NEW**: Auto-reconnection and page reload after service restart.
+- **CHANGED**: Hostname defaults to devicekey in lowercase if Meeting is configured.
+
+### Logging Improvements
+- **NEW**: "📥 Télécharger le log" button in Logging section.
+- **NEW**: `LogDownloadHandler` endpoint (`GET /api/logs/download/`).
+- **NEW**: Log files downloaded with timestamp in filename.
+
+### Installer Updates
+- **CHANGED**: Default hostname set from devicekey (lowercase) during installation.
+
+### File Version Updates
+- system_info.py: v0.1.0 (NEW)
+- config_store.py: v0.25.0 → v0.26.0
+- handlers.py: v0.25.0 → v0.26.0
+- server.py: v0.16.0 → v0.17.0
+- main.js: v0.32.0 → v0.33.0
+- main.css: v0.23.0 → v0.24.0
+- install_motion_frontend.sh: v1.3.0 → v1.4.0
+- CHANGELOG.md: v0.34.0 → v0.35.0
 
 ## 0.34.0 - 2025-12-29
 ### Dynamic Version Detection

@@ -1,4 +1,4 @@
-# File Version: 0.16.0
+# File Version: 0.17.0
 from __future__ import annotations
 
 import argparse
@@ -27,6 +27,7 @@ from .handlers import (
     CurrentUserHandler,
     FrameHandler,
     HealthHandler,
+    LogDownloadHandler,
     LoggingConfigHandler,
     LoginHandler,
     LogoutHandler,
@@ -35,6 +36,7 @@ from .handlers import (
     MJPEGControlHandler,
     MJPEGStreamHandler,
     PasswordChangeHandler,
+    ServiceRestartHandler,
     UpdateHandler,
     UserEnableHandler,
     UserHandler,
@@ -112,6 +114,8 @@ def _build_routes(static_path: Path) -> Sequence[Route]:
         (r"/api/meeting/?", MeetingHandler, None),
         (r"/api/logging/?", LoggingConfigHandler, None),
         (r"/api/update/?", UpdateHandler, None),
+        (r"/api/service/restart/?", ServiceRestartHandler, None),
+        (r"/api/logs/download/?", LogDownloadHandler, None),
         # User management routes
         (r"/api/user/me/?", CurrentUserHandler, None),
         (r"/api/user/password/?", PasswordChangeHandler, None),

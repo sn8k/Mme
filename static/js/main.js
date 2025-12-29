@@ -1,4 +1,4 @@
-/* File Version: 0.32.0 */
+/* File Version: 0.33.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -221,6 +221,110 @@
         pollMeetingStatus();
         // Auto-start the service (will only start if configured)
         controlMeeting('start');
+    }
+
+    /**
+     * Initialize service control buttons (restart service, download log).
+     */
+    function initServiceControls() {
+        // Restart service button
+        const restartBtn = document.getElementById('restartServiceBtn');
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => confirmRestartService());
+        }
+        
+        // Download log button
+        const downloadLogBtn = document.getElementById('downloadLogBtn');
+        if (downloadLogBtn) {
+            downloadLogBtn.addEventListener('click', () => downloadLog());
+        }
+    }
+
+    /**
+     * Show confirmation dialog and restart the service.
+     */
+    function confirmRestartService() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3>⚠️ Redémarrer le service</h3>
+                </div>
+                <div class="modal-body">
+                    <p>Êtes-vous sûr de vouloir redémarrer le service Motion Frontend ?</p>
+                    <p class="text-muted">L'interface sera temporairement indisponible pendant le redémarrage.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="button button-secondary" id="cancelRestart">Annuler</button>
+                    <button type="button" class="button button-warning" id="confirmRestart">Redémarrer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        const closeModal = () => modal.remove();
+        
+        document.getElementById('cancelRestart').addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        
+        document.getElementById('confirmRestart').addEventListener('click', async () => {
+            closeModal();
+            await restartService();
+        });
+    }
+
+    /**
+     * Restart the motion-frontend service.
+     */
+    async function restartService() {
+        motionFrontendUI.setStatus('Redémarrage du service...');
+        motionFrontendUI.showToast('Redémarrage du service en cours...', 'info');
+        
+        try {
+            await apiPost('/api/service/restart/', {});
+            
+            // Wait for server to restart and reload page
+            const serverBack = await waitForServerRestart(30, 2000, (current, max) => {
+                motionFrontendUI.setStatus(`Attente du serveur... (${current}/${max})`);
+            });
+            
+            if (serverBack) {
+                motionFrontendUI.showToast('Service redémarré avec succès !', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                motionFrontendUI.showToast('Le serveur ne répond pas. Veuillez rafraîchir manuellement.', 'warning');
+            }
+        } catch (error) {
+            // If network error, service is probably restarting
+            if (error.message.includes('fetch') || error.message.includes('network')) {
+                const serverBack = await waitForServerRestart(30, 2000);
+                if (serverBack) {
+                    motionFrontendUI.showToast('Service redémarré avec succès !', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    motionFrontendUI.showToast('Le serveur ne répond pas. Veuillez rafraîchir manuellement.', 'warning');
+                }
+            } else {
+                motionFrontendUI.showToast(`Erreur: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    /**
+     * Download the log file.
+     */
+    function downloadLog() {
+        // Create a temporary link to trigger download
+        const link = document.createElement('a');
+        link.href = '/api/logs/download/';
+        link.download = 'motion_frontend.log';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        motionFrontendUI.showToast('Téléchargement du log...', 'info');
     }
 
     function loadMainConfig() {
@@ -1295,6 +1399,63 @@
         state.pollingHandle = window.setInterval(refreshFrame, interval);
     }
 
+    /**
+     * Check for available updates (source and releases) and update the status display.
+     */
+    async function checkUpdateStatus() {
+        const updateStatusField = document.querySelector('#updateStatusEntry, input[name="updateStatus"]');
+        const updateStatusSpan = updateStatusField?.closest('.form-group')?.querySelector('.form-value') || 
+                                  updateStatusField?.parentElement?.querySelector('span');
+        
+        // Also check for a readonly display element
+        let displayElement = updateStatusField;
+        if (updateStatusField && updateStatusField.readOnly) {
+            displayElement = updateStatusField;
+        }
+        
+        try {
+            // Check source updates first (priority)
+            const sourceInfo = await apiPost('/api/update/', { action: 'check_source', branch: 'main' });
+            
+            if (sourceInfo && sourceInfo.source_info && !sourceInfo.error) {
+                const commitSha = sourceInfo.source_info.commit_sha;
+                const currentCommit = context.commit || '';
+                
+                // If commits are different and we have source info, source update is available
+                if (commitSha && currentCommit && commitSha.substring(0, 7) !== currentCommit.substring(0, 7)) {
+                    const shortSha = commitSha.substring(0, 7);
+                    const statusText = `🔧 Source disponible: ${shortSha}`;
+                    if (displayElement) {
+                        displayElement.value = statusText;
+                        displayElement.style.color = 'var(--accent-blue)';
+                    }
+                    return;  // Source update takes priority
+                }
+            }
+            
+            // If no source update, check release updates
+            const releaseInfo = await apiGet('/api/update/');
+            
+            if (releaseInfo && releaseInfo.update_available && !releaseInfo.error) {
+                const statusText = `📦 ${releaseInfo.latest_version} disponible`;
+                if (displayElement) {
+                    displayElement.value = statusText;
+                    displayElement.style.color = 'var(--success)';
+                }
+                return;
+            }
+            
+            // No updates available
+            if (displayElement) {
+                displayElement.value = '✓ À jour';
+                displayElement.style.color = 'var(--text-muted)';
+            }
+        } catch (error) {
+            // Silently ignore errors - don't change the display
+            console.debug('Update check failed:', error);
+        }
+    }
+
     function triggerUpdate() {
         // First, check for updates and show modal with info
         motionFrontendUI.setStatus('Checking for updates...');
@@ -2265,6 +2426,12 @@
         
         // Initialize Meeting controls after config is loaded
         setTimeout(initMeetingControls, 500);
+        
+        // Initialize service control buttons after DOM is ready
+        setTimeout(initServiceControls, 600);
+        
+        // Check for updates asynchronously (after config loaded)
+        setTimeout(checkUpdateStatus, 2000);
         
         // Load camera config if a camera is selected
         if (state.cameraId) {

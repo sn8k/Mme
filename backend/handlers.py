@@ -1,10 +1,11 @@
-# File Version: 0.25.0
+# File Version: 0.26.0
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
 import secrets
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1492,6 +1493,88 @@ class UpdateHandler(BaseHandler):
             self.write_json({"error": f"Unknown action: {action}"}, status=400)
 
 
+# ============================================================================
+# Service Control Handler
+# ============================================================================
+
+class ServiceRestartHandler(BaseHandler):
+    """Handler for restarting the service (Linux only)."""
+    
+    async def post(self) -> None:
+        """
+        Restart the motion-frontend service.
+        
+        Only works on Linux with systemd.
+        """
+        import platform
+        import subprocess
+        import asyncio
+        
+        if platform.system() != "Linux":
+            self.write_json({
+                "success": False,
+                "error": "Service restart is only available on Linux"
+            }, status=400)
+            return
+        
+        try:
+            # Schedule the restart after sending response
+            async def delayed_restart():
+                await asyncio.sleep(1)  # Give time for response to be sent
+                subprocess.run(
+                    ["sudo", "systemctl", "restart", "motion-frontend"],
+                    check=False
+                )
+            
+            # Start the delayed restart
+            asyncio.create_task(delayed_restart())
+            
+            self.write_json({
+                "success": True,
+                "message": "Service restart initiated. Please wait..."
+            })
+        except Exception as e:
+            self.write_json({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+
+
+# ============================================================================
+# Log Download Handler
+# ============================================================================
+
+class LogDownloadHandler(BaseHandler):
+    """Handler for downloading log files."""
+    
+    async def get(self) -> None:
+        """Download the current log file."""
+        from pathlib import Path
+        
+        log_file = Path(__file__).parent.parent / "logs" / "motion_frontend.log"
+        
+        if not log_file.exists():
+            self.set_status(404)
+            self.write_json({"error": "Log file not found"})
+            return
+        
+        try:
+            # Read log content
+            log_content = log_file.read_text(encoding="utf-8", errors="replace")
+            
+            # Set headers for file download
+            self.set_header("Content-Type", "text/plain; charset=utf-8")
+            self.set_header(
+                "Content-Disposition",
+                f'attachment; filename="motion_frontend_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log"'
+            )
+            
+            self.write(log_content)
+        except Exception as e:
+            self.set_status(500)
+            self.write_json({"error": str(e)})
+
+
 HANDLER_EXPORTS = [
     MainHandler,
     LoginHandler,
@@ -1531,4 +1614,7 @@ HANDLER_EXPORTS = [
     RTSPStreamHandler,
     # Update handler
     UpdateHandler,
+    # Service control handlers
+    ServiceRestartHandler,
+    LogDownloadHandler,
 ]

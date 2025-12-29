@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.3.0
+# File Version: 1.4.0
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -617,10 +617,17 @@ setup_configuration() {
         local meeting_key="${MEETING_DEVICE_KEY:-}"
         local meeting_token="${MEETING_TOKEN_CODE:-}"
         
+        # Hostname defaults to devicekey in lowercase, or "motion-frontend" if not set
+        local default_hostname="motion-frontend"
+        if [[ -n "$meeting_key" ]]; then
+            default_hostname=$(echo "$meeting_key" | tr '[:upper:]' '[:lower:]')
+            log_info "Hostname défini à partir de la Device Key: $default_hostname"
+        fi
+        
         cat > "$app_config_dir/motion_frontend.json" << EOF
 {
   "version": "1.0",
-  "hostname": "motion-frontend",
+  "hostname": "${default_hostname}",
   "theme": "dark",
   "language": "fr",
   "logging_level": "INFO",

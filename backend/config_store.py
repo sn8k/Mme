@@ -1,4 +1,4 @@
-# File Version: 0.25.0
+# File Version: 0.26.0
 from __future__ import annotations
 
 import json
@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import updater
+from . import system_info
 
 logger = logging.getLogger(__name__)
 
@@ -497,7 +498,14 @@ class ConfigStore:
             return False
 
     def get_hostname(self) -> str:
+        """Get hostname. If default, returns devicekey in lowercase if available."""
+        if self.hostname == "motion-frontend-dev" and self._meeting_device_key:
+            return self._meeting_device_key.lower()
         return self.hostname
+
+    def get_effective_hostname(self) -> str:
+        """Get the effective hostname for display in settings."""
+        return self.get_hostname()
 
     def get_theme(self) -> str:
         return self._theme
@@ -507,18 +515,28 @@ class ConfigStore:
         self._dirty = True
 
     def get_main_config(self) -> Dict[str, List[Dict[str, Any]]]:
-        motion_status = self._motion_version or "Non installé"
-        update_status = self._update_available or "À jour"
+        # Get system versions dynamically
+        sys_versions = system_info.get_system_versions()
+        motion_status = sys_versions.motion_version or "Non installé"
+        ffmpeg_status = sys_versions.ffmpeg_version or "Non installé"
+        
+        # Build update status - source updates take priority
+        update_status = "À jour"
         if self._update_available:
             update_status = f"Nouvelle version disponible : {self._update_available}"
+
+        # Effective hostname (devicekey in lowercase if default)
+        effective_hostname = self.get_effective_hostname()
 
         return {
             "general": [
                 {"id": "frontendVersion", "label": "Version Frontend", "type": "str", "value": self.frontend_version, "readonly": True},
                 {"id": "motionVersion", "label": "Version Motion", "type": "str", "value": motion_status, "readonly": True},
+                {"id": "ffmpegVersion", "label": "Version FFmpeg", "type": "str", "value": ffmpeg_status, "readonly": True},
                 {"id": "updateStatus", "label": "Mise à jour", "type": "str", "value": update_status, "readonly": True},
                 {"id": "separator1", "type": "separator", "label": "Système"},
-                {"id": "hostname", "label": "Nom d'hôte", "type": "str", "value": self.hostname},
+                {"id": "hostname", "label": "Nom d'hôte", "type": "str", "value": effective_hostname},
+                {"id": "restartService", "label": "Service", "type": "html", "html": "<button class='button button-warning restart-service-btn' id='restartServiceBtn'>Redémarrer le service</button>"},
                 {"id": "language", "label": "Langue", "type": "choices", "choices": [
                     {"value": "fr", "label": "Français"},
                     {"value": "en", "label": "English"},
@@ -536,6 +554,7 @@ class ConfigStore:
                 ], "value": self._logging_level},
                 {"id": "logToFile", "label": "Enregistrer dans un fichier", "type": "bool", "value": self._log_to_file},
                 {"id": "logResetOnStart", "label": "Effacer le log au démarrage", "type": "bool", "value": self._log_reset_on_start},
+                {"id": "downloadLog", "label": "Télécharger", "type": "html", "html": "<button class='button download-log-btn' id='downloadLogBtn'>📥 Télécharger le log</button>"},
                 {"id": "separatorAdmin", "type": "separator", "label": "Compte administrateur"},
                 {"id": "adminUsername", "label": "Login admin", "type": "str", "value": "admin"},
                 {"id": "adminPassword", "label": "Mot de passe admin", "type": "pwd", "value": "", "placeholder": "Nouveau mot de passe"},

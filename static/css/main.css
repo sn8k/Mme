@@ -1,4 +1,4 @@
-/* File Version: 0.23.0 */
+/* File Version: 0.24.0 */
 .app-header {
     display: flex;
     justify-content: space-between;
@@ -1998,6 +1998,26 @@ body.sidebar-open .camera-preview {
 .button-warning:disabled {
     background: var(--bg-tertiary);
     color: var(--text-muted);
+}
+
+/* Service control buttons */
+.restart-service-btn,
+.download-log-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.download-log-btn {
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-blue-darker));
+    color: white;
+    border: none;
+}
+
+.download-log-btn:hover {
+    filter: brightness(1.1);
 }
 
 /* ============================================================================
