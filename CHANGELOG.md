@@ -1,5 +1,22 @@
-<!-- File Version: 0.35.6 -->
+<!-- File Version: 0.35.7 -->
 # Changelog
+
+## 0.35.7 - 2025-12-29
+### Installer Script Improvements
+- **NEW**: `--update-service` option to force update the systemd service file.
+- **IMPROVED**: `--repair` now detects outdated systemd service and updates it automatically.
+- **IMPROVED**: `update_systemd_service()` function kills processes holding MJPEG ports (8081-8090).
+- **FIXED**: Repair mode now checks for `KillMode=mixed` in service file to detect old config.
+- **INFO**: When updating service, all residual processes are properly terminated before restart.
+
+### Technical Changes
+- `repair()`: Now checks for `KillMode=mixed` and `TimeoutStopSec` in systemd service file.
+- `update_systemd_service()`: New function that stops service, kills remaining processes, frees ports.
+- Installer help updated with `--update-service` documentation.
+
+### File Version Updates
+- install_motion_frontend.sh: Added --update-service, improved --repair
+- CHANGELOG.md: v0.35.6 → v0.35.7
 
 ## 0.35.6 - 2025-12-29
 ### Graceful Shutdown & Service Restart Improvements

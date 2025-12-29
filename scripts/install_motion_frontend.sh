@@ -797,6 +797,48 @@ EOF
     log_success "Service systemd créé et activé"
 }
 
+update_systemd_service() {
+    print_banner
+    log_step "Mise à jour du service systemd"
+    
+    # Stop the service first
+    log_info "Arrêt du service..."
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+    sleep 2
+    
+    # Kill any remaining processes
+    log_info "Nettoyage des processus résiduels..."
+    pkill -9 -f "python.*backend.server" 2>/dev/null || true
+    sleep 1
+    
+    # Check and free ports 8081-8090 (MJPEG ports range)
+    for port in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do
+        local pid
+        pid=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'pid=\K\d+' | head -1)
+        if [[ -n "$pid" ]]; then
+            log_warning "Killing process $pid holding port $port"
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    sleep 1
+    
+    # Recreate the systemd service
+    create_systemd_service
+    
+    # Restart the service
+    log_info "Redémarrage du service..."
+    systemctl start "$SERVICE_NAME"
+    
+    sleep 3
+    
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        log_success "Service mis à jour et redémarré avec succès"
+    else
+        log_error "Le service n'a pas redémarré correctement"
+        log_info "Vérifiez avec: journalctl -u $SERVICE_NAME -n 50"
+    fi
+}
+
 start_service() {
     log_step "Démarrage du service"
     
@@ -1141,6 +1183,23 @@ repair() {
     else
         log_success "✓ Service systemd présent"
         
+        # Check if service has required shutdown options (KillMode, TimeoutStopSec)
+        if ! grep -q "KillMode=mixed" "$service_file" 2>/dev/null || \
+           ! grep -q "TimeoutStopSec=" "$service_file" 2>/dev/null; then
+            log_warning "✗ Service systemd obsolète (options de shutdown manquantes)"
+            ((issues_found++))
+            
+            log_info "  → Mise à jour du service systemd..."
+            # Stop service before updating
+            systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+            sleep 2
+            # Kill any remaining processes holding ports
+            pkill -9 -f "python.*backend.server" 2>/dev/null || true
+            sleep 1
+            create_systemd_service
+            ((issues_fixed++))
+        fi
+        
         # Check if service is enabled
         if ! systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
             log_warning "✗ Service non activé au démarrage"
@@ -1425,6 +1484,7 @@ show_help() {
     echo "  --uninstall, -u         Désinstalle Motion Frontend"
     echo "  --update                Met à jour l'installation existante"
     echo "  --repair                Vérifie et répare l'installation"
+    echo "  --update-service        Force la mise à jour du service systemd"
     echo ""
     echo "Configuration Meeting:"
     echo "  --device-key KEY        Device Key pour le service Meeting (obligatoire avec --token)"
@@ -1448,6 +1508,9 @@ show_help() {
     echo ""
     echo "  Installation sans Meeting:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --skip-meeting"
+    echo ""
+    echo "  Mise à jour du service systemd:"
+    echo "    sudo ./install_motion_frontend.sh --update-service"
     echo ""
     echo "  Réparation:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --repair"
@@ -1502,6 +1565,10 @@ main() {
                 SKIP_MEETING_CONFIG=true
                 shift
                 ;;
+            --update-service)
+                action="update-service"
+                shift
+                ;;
             *)
                 log_error "Option inconnue: $1"
                 show_help
@@ -1529,6 +1596,10 @@ main() {
         repair)
             check_root
             repair
+            ;;
+        update-service)
+            check_root
+            update_systemd_service
             ;;
     esac
 }
