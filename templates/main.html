@@ -366,6 +366,14 @@
             const context = contextAttr ? JSON.parse(contextAttr) : {};
             window.motionFrontendContext = context;
 
+            // Define global translation function _ that falls back to identity if i18n not loaded
+            window._ = function(text) {
+                if (window.i18n && typeof window.i18n.gettext === 'function') {
+                    return window.i18n.gettext(text);
+                }
+                return text;
+            };
+
             function applyCatalog(catalog) {
                 window.motionFrontendI18n = window.motionFrontendI18n || {};
                 window.motionFrontendI18n[context.lingvo] = catalog;

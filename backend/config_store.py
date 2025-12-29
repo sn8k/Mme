@@ -1,4 +1,4 @@
-# File Version: 0.27.0
+# File Version: 0.28.0
 from __future__ import annotations
 
 import json
@@ -625,6 +625,32 @@ class ConfigStore:
     def get_camera(self, camera_id: str) -> Optional[CameraConfig]:
         return self._cameras.get(camera_id)
 
+    def _get_camera_image_section(self, cam: CameraConfig) -> List[Dict[str, Any]]:
+        """Get camera image controls section based on platform.
+        
+        Windows: Show historical brightness/contrast/saturation sliders plus V4L2/DirectShow detection.
+        Linux: Only show V4L2 detection button and container for detected controls.
+        """
+        import platform
+        is_linux = platform.system().lower() == "linux"
+        
+        if is_linux:
+            # Linux: only show detection button and container for V4L2 controls
+            return [
+                {"id": "detectControls", "label": "", "type": "html", "html": '<button type="button" id="detectCameraControlsBtn" class="btn-detect">🔍 Détecter les contrôles V4L2</button><div class="detect-hint">Détecte les contrôles disponibles sur le périphérique vidéo</div>'},
+                {"id": "cameraControls", "label": "", "type": "html", "html": '<div id="cameraControlsContainer" class="camera-controls-list"></div>'},
+            ]
+        else:
+            # Windows: show historical sliders plus DirectShow detection
+            return [
+                {"id": "brightness", "label": "Luminosité", "type": "range", "value": cam.brightness, "min": -100, "max": 100},
+                {"id": "contrast", "label": "Contraste", "type": "range", "value": cam.contrast, "min": -100, "max": 100},
+                {"id": "saturation", "label": "Saturation", "type": "range", "value": cam.saturation, "min": -100, "max": 100},
+                {"id": "imageSeparator", "label": "Contrôles avancés", "type": "separator"},
+                {"id": "detectControls", "label": "", "type": "html", "html": '<button type="button" id="detectCameraControlsBtn" class="btn-detect">🔍 Détecter les contrôles</button><div class="detect-hint">Détecte les contrôles disponibles sur le périphérique (DirectShow)</div>'},
+                {"id": "cameraControls", "label": "", "type": "html", "html": '<div id="cameraControlsContainer" class="camera-controls-list"></div>'},
+            ]
+
     def _get_audio_device_choices(self) -> List[Dict[str, str]]:
         """Get list of audio devices as choices for dropdown."""
         choices = [{"value": "", "label": "Aucun (vidéo uniquement)"}]
@@ -705,14 +731,7 @@ class ConfigStore:
                     {"value": "270", "label": "270°"},
                 ], "value": str(cam.rotation)},
             ],
-            "camera_image": [
-                {"id": "brightness", "label": "Luminosité", "type": "range", "value": cam.brightness, "min": -100, "max": 100},
-                {"id": "contrast", "label": "Contraste", "type": "range", "value": cam.contrast, "min": -100, "max": 100},
-                {"id": "saturation", "label": "Saturation", "type": "range", "value": cam.saturation, "min": -100, "max": 100},
-                {"id": "imageSeparator", "label": "Contrôles avancés", "type": "separator"},
-                {"id": "detectControls", "label": "", "type": "html", "html": '<button type="button" id="detectCameraControlsBtn" class="btn-detect">🔍 Détecter les contrôles</button><div class="detect-hint">Détecte les contrôles disponibles sur le périphérique (V4L2/DirectShow)</div>'},
-                {"id": "cameraControls", "label": "", "type": "html", "html": '<div id="cameraControlsContainer" class="camera-controls-list"></div>'},
-            ],
+            "camera_image": self._get_camera_image_section(cam),
             "camera_streaming": [
                 {"id": "streamEnabled", "label": "Streaming actif", "type": "bool", "value": cam.enabled},
                 {"id": "streamSource", "label": "Source du stream", "type": "choices", "choices": self._get_stream_source_choices(), "value": cam.stream_source},

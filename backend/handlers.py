@@ -1318,6 +1318,7 @@ class RTSPStatusHandler(BaseHandler):
         self.write_json({
             "ffmpeg_available": server.is_ffmpeg_available(),
             "ffmpeg_version": server.get_ffmpeg_version(),
+            "rtsp_server_available": server.is_rtsp_server_available(),
             "streams": {
                 cam_id: {
                     "camera_id": status.camera_id,

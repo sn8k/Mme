@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.4.0
+# File Version: 1.5.0
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -467,6 +467,138 @@ install_system_dependencies() {
     }
     
     log_success "Dépendances système installées"
+}
+
+install_mediamtx() {
+    log_step "Installation de MediaMTX (serveur RTSP)"
+    
+    # Check if already installed
+    if command -v mediamtx &> /dev/null; then
+        local current_version
+        current_version=$(mediamtx --version 2>/dev/null | head -n1 || echo "unknown")
+        log_info "MediaMTX est déjà installé: $current_version"
+        return 0
+    fi
+    
+    # Detect architecture
+    local arch
+    arch=$(uname -m)
+    local mediamtx_arch=""
+    
+    case "$arch" in
+        aarch64|arm64)
+            mediamtx_arch="arm64v8"
+            ;;
+        armv7l|armhf)
+            mediamtx_arch="armv7"
+            ;;
+        x86_64|amd64)
+            mediamtx_arch="amd64"
+            ;;
+        *)
+            log_warning "Architecture non supportée pour MediaMTX: $arch"
+            log_warning "Le streaming RTSP ne sera pas disponible"
+            return 1
+            ;;
+    esac
+    
+    # Get latest release version from GitHub
+    log_info "Récupération de la dernière version de MediaMTX..."
+    local latest_version
+    latest_version=$(curl -sSL "https://api.github.com/repos/bluenviron/mediamtx/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+' || echo "")
+    
+    if [[ -z "$latest_version" ]]; then
+        log_warning "Impossible de récupérer la version de MediaMTX"
+        log_warning "Le streaming RTSP ne sera pas disponible"
+        return 1
+    fi
+    
+    log_info "Téléchargement de MediaMTX $latest_version pour $mediamtx_arch..."
+    
+    local download_url="https://github.com/bluenviron/mediamtx/releases/download/${latest_version}/mediamtx_${latest_version}_linux_${mediamtx_arch}.tar.gz"
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    
+    if ! curl -sSL "$download_url" -o "$temp_dir/mediamtx.tar.gz"; then
+        log_warning "Échec du téléchargement de MediaMTX"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Extract and install
+    log_info "Installation de MediaMTX..."
+    tar -xzf "$temp_dir/mediamtx.tar.gz" -C "$temp_dir"
+    
+    # Install binary
+    install -m 755 "$temp_dir/mediamtx" /usr/local/bin/mediamtx
+    
+    # Install default config if not exists
+    if [[ ! -f /etc/mediamtx.yml ]]; then
+        if [[ -f "$temp_dir/mediamtx.yml" ]]; then
+            install -m 644 "$temp_dir/mediamtx.yml" /etc/mediamtx.yml
+        else
+            # Create minimal config for our use case
+            cat > /etc/mediamtx.yml << 'MEDIAMTX_CONFIG'
+# MediaMTX configuration for Motion Frontend
+# Documentation: https://github.com/bluenviron/mediamtx
+
+# Log level (debug, info, warn, error)
+logLevel: info
+
+# RTSP server settings
+rtsp: yes
+rtspAddress: :8554
+
+# Disable other protocols we don't need
+rtmp: no
+hls: no
+webrtc: no
+
+# Path defaults - allow publishing from FFmpeg
+pathDefaults:
+  # Allow anyone to publish (FFmpeg will push streams here)
+  publishUser:
+  publishPass:
+  # Allow anyone to read (clients will connect here)
+  readUser:
+  readPass:
+MEDIAMTX_CONFIG
+        fi
+    fi
+    
+    # Create systemd service for MediaMTX
+    cat > /etc/systemd/system/mediamtx.service << 'MEDIAMTX_SERVICE'
+[Unit]
+Description=MediaMTX RTSP Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mediamtx /etc/mediamtx.yml
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+MEDIAMTX_SERVICE
+    
+    # Enable and start the service
+    systemctl daemon-reload
+    systemctl enable mediamtx.service
+    systemctl start mediamtx.service
+    
+    # Cleanup
+    rm -rf "$temp_dir"
+    
+    # Verify installation
+    if command -v mediamtx &> /dev/null; then
+        log_success "MediaMTX installé avec succès"
+        log_info "Service MediaMTX démarré sur le port 8554"
+    else
+        log_warning "L'installation de MediaMTX a échoué"
+        return 1
+    fi
 }
 
 create_user_and_groups() {
@@ -980,6 +1112,20 @@ uninstall() {
         fi
     fi
     
+    # Remove MediaMTX (optional)
+    if command -v mediamtx &> /dev/null || [[ -f /etc/systemd/system/mediamtx.service ]]; then
+        if confirm "Voulez-vous également désinstaller MediaMTX (serveur RTSP)?" "n"; then
+            log_info "Arrêt et suppression de MediaMTX..."
+            systemctl stop mediamtx.service 2>/dev/null || true
+            systemctl disable mediamtx.service 2>/dev/null || true
+            rm -f /etc/systemd/system/mediamtx.service
+            rm -f /usr/local/bin/mediamtx
+            rm -f /etc/mediamtx.yml
+            systemctl daemon-reload
+            log_success "MediaMTX désinstallé"
+        fi
+    fi
+    
     echo ""
     log_success "Désinstallation terminée"
     echo ""
@@ -1235,7 +1381,38 @@ repair() {
     fi
     
     # ========================================================================
-    # Check 6: Configuration files
+    # Check 6: MediaMTX (RTSP server)
+    # ========================================================================
+    log_info "Vérification de MediaMTX (serveur RTSP)..."
+    
+    if ! command -v mediamtx &> /dev/null; then
+        log_warning "✗ MediaMTX non installé (streaming RTSP non disponible)"
+        ((issues_found++))
+        
+        if confirm "  Voulez-vous installer MediaMTX?" "y"; then
+            install_mediamtx
+            if command -v mediamtx &> /dev/null; then
+                ((issues_fixed++))
+            fi
+        fi
+    else
+        log_success "✓ MediaMTX installé"
+        
+        # Check if service is running
+        if ! systemctl is-active --quiet mediamtx 2>/dev/null; then
+            log_warning "✗ Service MediaMTX non actif"
+            ((issues_found++))
+            
+            log_info "  → Démarrage du service MediaMTX..."
+            systemctl start mediamtx 2>/dev/null || true
+            ((issues_fixed++))
+        else
+            log_success "✓ Service MediaMTX actif"
+        fi
+    fi
+    
+    # ========================================================================
+    # Check 7: Configuration files
     # ========================================================================
     log_info "Vérification de la configuration..."
     
@@ -1257,7 +1434,7 @@ repair() {
     fi
     
     # ========================================================================
-    # Check 7: Log directory permissions
+    # Check 8: Log directory permissions
     # ========================================================================
     log_info "Vérification du répertoire de logs..."
     
@@ -1458,6 +1635,7 @@ install() {
     fi
     
     install_system_dependencies
+    install_mediamtx
     create_user_and_groups
     create_directories
     download_source

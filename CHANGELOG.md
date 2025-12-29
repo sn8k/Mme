@@ -1,5 +1,61 @@
-<!-- File Version: 0.35.7 -->
+<!-- File Version: 0.35.9 -->
 # Changelog
+
+## 0.35.9 - 2025-12-29
+### MediaMTX Integration (Turnkey RTSP Solution)
+- **NEW**: Installer now automatically installs MediaMTX RTSP server for complete RTSP support.
+- **NEW**: `install_mediamtx()` function downloads and installs MediaMTX binary from GitHub releases.
+- **NEW**: MediaMTX systemd service created and enabled automatically.
+- **NEW**: Minimal MediaMTX configuration for Motion Frontend use case (RTSP only, no HLS/RTMP/WebRTC).
+- **IMPROVED**: `--repair` option now checks for MediaMTX and offers to install it if missing.
+- **IMPROVED**: `--uninstall` option now offers to remove MediaMTX.
+- **IMPROVED**: RTSP server now auto-starts MediaMTX service if not running.
+- **UPDATED**: Error messages now suggest running `--repair` instead of manual installation.
+
+### Technical Changes
+- `install_motion_frontend.sh`: Added `install_mediamtx()` function with architecture detection.
+- `install_motion_frontend.sh`: Added MediaMTX to install sequence between dependencies and user creation.
+- `install_motion_frontend.sh`: Repair function includes MediaMTX check (Check 6).
+- `install_motion_frontend.sh`: Uninstall offers to remove MediaMTX, service, and config.
+- `rtsp_server.py`: Auto-starts mediamtx service if not active before streaming.
+- `main.js`: Updated error message to suggest --repair command.
+- i18n: Updated translations for new MediaMTX messages.
+
+### Supported Architectures
+- ARM64 (aarch64) - Raspberry Pi 4/5
+- ARMv7 (armhf) - Raspberry Pi 3
+- AMD64 (x86_64) - Desktop/Server Linux
+
+### File Version Updates
+- install_motion_frontend.sh: v1.4.0 → v1.5.0
+- rtsp_server.py: v0.4.0 → v0.4.1
+- main.js: v0.35.0 → v0.35.1
+- CHANGELOG.md: v0.35.8 → v0.35.9
+
+## 0.35.8 - 2025-12-29
+### UI & RTSP Fixes
+- **FIXED**: "_ is not defined" error when saving RTSP settings - Added global `window._()` translation function in main.html.
+- **FIXED**: Platform-specific camera image controls - Windows shows historical sliders, Linux shows only V4L2 detection.
+- **IMPROVED**: RTSP server now checks for MediaMTX availability before starting (FFmpeg alone cannot create RTSP server).
+- **NEW**: Clear error message when MediaMTX is not installed, with link to install instructions.
+- **NEW**: `is_rtsp_server_available()` method to check for MediaMTX/rtsp-simple-server.
+- **NEW**: API returns `rtsp_server_available` flag in RTSP status endpoint.
+- **INFO**: MJPEG already stops when RTSP starts (verified existing implementation).
+
+### Technical Changes
+- `templates/main.html`: Added `window._()` global function with fallback to identity if i18n not loaded.
+- `backend/config_store.py`: New `_get_camera_image_section()` method for platform-specific image controls.
+- `backend/rtsp_server.py`: Added `_find_mediamtx()` and `is_rtsp_server_available()` methods.
+- `backend/rtsp_server.py`: `start_stream()` now validates MediaMTX availability before starting FFmpeg.
+- `backend/handlers.py`: `RTSPStatusHandler` now returns `rtsp_server_available` flag.
+- `static/js/main.js`: RTSP section shows MediaMTX requirement warning with install link.
+- i18n: Added translations for RTSP server messages (fr/en).
+
+### File Version Updates
+- main.js: v0.34.0 → v0.35.0
+- config_store.py: v0.27.0 → v0.28.0
+- rtsp_server.py: v0.3.0 → v0.4.0
+- CHANGELOG.md: v0.35.7 → v0.35.8
 
 ## 0.35.7 - 2025-12-29
 ### Installer Script Improvements

@@ -1,4 +1,4 @@
-/* File Version: 0.34.0 */
+/* File Version: 0.35.1 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -3758,7 +3758,7 @@
         const statusBadge = document.getElementById(`rtspStatusBadge_${state.cameraId}`);
         if (!statusBadge) return;  // RTSP section not yet rendered
         
-        // Check FFmpeg availability first
+        // Check FFmpeg and MediaMTX availability first
         const serverStatus = await checkRTSPStatus();
         
         if (!serverStatus.ffmpeg_available) {
@@ -3768,6 +3768,21 @@
             const errorDisplay = document.getElementById(`rtspError_${state.cameraId}`);
             if (errorDisplay) {
                 errorDisplay.textContent = _('FFmpeg is required for RTSP streaming. Please install FFmpeg.');
+                errorDisplay.style.display = 'block';
+            }
+            return;
+        }
+        
+        if (!serverStatus.rtsp_server_available) {
+            // Show warning that MediaMTX needs to be installed via --repair
+            statusBadge.textContent = _('RTSP server not available');
+            statusBadge.className = 'rtsp-status warning';
+            const errorDisplay = document.getElementById(`rtspError_${state.cameraId}`);
+            if (errorDisplay) {
+                errorDisplay.innerHTML = _('MediaMTX not installed. ') + 
+                    _('Run --repair to install: ') +
+                    '<code>sudo bash scripts/install_motion_frontend.sh --repair</code>' +
+                    _(' or use the MJPEG stream instead.');
                 errorDisplay.style.display = 'block';
             }
             return;
