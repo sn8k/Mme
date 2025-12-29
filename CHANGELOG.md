@@ -16,6 +16,13 @@
 - **NEW**: Configuration backup and restore during updates.
 - **NEW**: Colored terminal output with progress indicators.
 
+### Meeting Service Configuration
+- **NEW**: `--device-key` option to set Meeting device key during installation.
+- **NEW**: `--token` option to set Meeting token code during installation.
+- **NEW**: `--server-url` option to set Meeting server URL during installation.
+- **NEW**: `--skip-meeting` option to skip Meeting configuration prompt.
+- **NEW**: Interactive prompt for Meeting configuration if not provided via CLI.
+
 ### Installation Commands
 ```bash
 # Quick install (main branch)
@@ -24,12 +31,16 @@ curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion
 # Install with branch selection
 curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch
 
+# Install with Meeting configuration
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- \
+  --device-key YOUR_KEY --token YOUR_TOKEN --server-url https://meeting.example.com
+
 # Uninstall
 curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
 ```
 
 ### File Version Updates
-- **NEW**: install_motion_frontend.sh: v1.0.0
+- **NEW**: install_motion_frontend.sh: v1.1.0
 - CHANGELOG.md: v0.29.0 → v0.30.0
 - TECHNICAL_DOCUMENTATION.md: v1.17.0 → v1.18.0
 

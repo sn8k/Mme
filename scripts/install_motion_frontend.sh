@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.0.0
+# File Version: 1.1.0
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -46,6 +46,11 @@ SERVICE_GROUP="motion-frontend"
 DEFAULT_BRANCH="main"
 DEFAULT_PORT=8765
 DEFAULT_HOST="0.0.0.0"
+
+# Meeting service settings (can be set via command line or prompt)
+MEETING_SERVER_URL=""
+MEETING_DEVICE_KEY=""
+MEETING_TOKEN_CODE=""
 
 # ============================================================================
 # Colors and formatting
@@ -239,6 +244,61 @@ select_branch() {
 }
 
 # ============================================================================
+# Meeting service configuration
+# ============================================================================
+
+configure_meeting_service() {
+    log_step "Configuration du service Meeting (optionnel)"
+    
+    echo ""
+    echo -e "${CYAN}Le service Meeting permet de signaler l'état en ligne de l'appareil${NC}"
+    echo -e "${CYAN}à un serveur central (heartbeat).${NC}"
+    echo ""
+    
+    if ! confirm "Voulez-vous configurer le service Meeting maintenant?" "n"; then
+        log_info "Configuration Meeting ignorée (peut être configuré plus tard via l'interface web)"
+        return
+    fi
+    
+    echo ""
+    
+    # Server URL
+    read -r -p "URL du serveur Meeting [https://meeting.example.com]: " input_server
+    if [[ -n "$input_server" ]]; then
+        MEETING_SERVER_URL="$input_server"
+    fi
+    
+    # Device Key
+    echo ""
+    echo -e "${YELLOW}La Device Key est l'identifiant unique de cet appareil.${NC}"
+    echo -e "${YELLOW}Format recommandé: chaîne hexadécimale (ex: F743F2371A834C31B56B3B47708064FF)${NC}"
+    read -r -p "Device Key: " input_device_key
+    if [[ -n "$input_device_key" ]]; then
+        MEETING_DEVICE_KEY="$input_device_key"
+    fi
+    
+    # Token Code
+    echo ""
+    echo -e "${YELLOW}Le Token Code est le code d'authentification pour le serveur Meeting.${NC}"
+    read -r -p "Token Code: " input_token
+    if [[ -n "$input_token" ]]; then
+        MEETING_TOKEN_CODE="$input_token"
+    fi
+    
+    # Summary
+    if [[ -n "$MEETING_SERVER_URL" ]] || [[ -n "$MEETING_DEVICE_KEY" ]] || [[ -n "$MEETING_TOKEN_CODE" ]]; then
+        echo ""
+        log_info "Configuration Meeting:"
+        [[ -n "$MEETING_SERVER_URL" ]] && echo "  - Server URL: $MEETING_SERVER_URL"
+        [[ -n "$MEETING_DEVICE_KEY" ]] && echo "  - Device Key: $MEETING_DEVICE_KEY"
+        [[ -n "$MEETING_TOKEN_CODE" ]] && echo "  - Token Code: ${MEETING_TOKEN_CODE:0:3}***"
+        log_success "Configuration Meeting enregistrée"
+    else
+        log_info "Aucune configuration Meeting saisie"
+    fi
+}
+
+# ============================================================================
 # Installation functions
 # ============================================================================
 
@@ -410,10 +470,22 @@ setup_configuration() {
     # Copy default configuration if it exists and config doesn't exist yet
     if [[ -f "$INSTALL_DIR/config/motion_frontend.json" ]]; then
         log_info "Configuration par défaut trouvée"
+        
+        # Update Meeting configuration if provided
+        if [[ -n "$MEETING_SERVER_URL" ]] || [[ -n "$MEETING_DEVICE_KEY" ]] || [[ -n "$MEETING_TOKEN_CODE" ]]; then
+            log_info "Mise à jour de la configuration Meeting..."
+            update_meeting_config "$app_config_dir/motion_frontend.json"
+        fi
     else
         # Create minimal default configuration
         log_info "Création de la configuration par défaut..."
-        cat > "$app_config_dir/motion_frontend.json" << 'EOF'
+        
+        # Escape values for JSON
+        local meeting_server="${MEETING_SERVER_URL:-}"
+        local meeting_key="${MEETING_DEVICE_KEY:-}"
+        local meeting_token="${MEETING_TOKEN_CODE:-}"
+        
+        cat > "$app_config_dir/motion_frontend.json" << EOF
 {
   "version": "1.0",
   "hostname": "motion-frontend",
@@ -439,7 +511,13 @@ setup_configuration() {
   "audio_filter_patterns": [
     "hdmi",
     "spdif"
-  ]
+  ],
+  "meeting": {
+    "server_url": "${meeting_server}",
+    "device_key": "${meeting_key}",
+    "token_code": "${meeting_token}",
+    "heartbeat_interval": 60
+  }
 }
 EOF
     fi
@@ -464,6 +542,55 @@ EOF
     fi
     
     log_success "Configuration créée"
+}
+
+# Update Meeting config in existing JSON file
+update_meeting_config() {
+    local config_file="$1"
+    local temp_file="${config_file}.tmp"
+    
+    # Check if python3 is available for JSON manipulation
+    if command -v python3 &> /dev/null; then
+        python3 << PYEOF
+import json
+import sys
+
+try:
+    with open('${config_file}', 'r') as f:
+        config = json.load(f)
+    
+    # Ensure meeting section exists
+    if 'meeting' not in config:
+        config['meeting'] = {
+            'server_url': '',
+            'device_key': '',
+            'token_code': '',
+            'heartbeat_interval': 60
+        }
+    
+    # Update values if provided
+    server_url = '${MEETING_SERVER_URL}'
+    device_key = '${MEETING_DEVICE_KEY}'
+    token_code = '${MEETING_TOKEN_CODE}'
+    
+    if server_url:
+        config['meeting']['server_url'] = server_url
+    if device_key:
+        config['meeting']['device_key'] = device_key
+    if token_code:
+        config['meeting']['token_code'] = token_code
+    
+    with open('${config_file}', 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print('OK')
+except Exception as e:
+    print(f'ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+PYEOF
+    else
+        log_warning "Python3 non disponible, configuration Meeting non mise à jour"
+    fi
 }
 
 set_permissions() {
@@ -759,11 +886,19 @@ install() {
         log_info "Utilisation de la branche: $SELECTED_BRANCH"
     fi
     
+    # Configure Meeting service if not already set via command line
+    if [[ -z "$MEETING_DEVICE_KEY" ]] && [[ "$SKIP_MEETING_CONFIG" != true ]]; then
+        configure_meeting_service
+    fi
+    
     echo ""
     log_info "L'installation va commencer avec les paramètres suivants:"
     echo "  - Branche: $SELECTED_BRANCH"
     echo "  - Répertoire: $INSTALL_DIR"
     echo "  - Port: $DEFAULT_PORT"
+    if [[ -n "$MEETING_DEVICE_KEY" ]]; then
+        echo "  - Meeting Device Key: ${MEETING_DEVICE_KEY:0:8}..."
+    fi
     echo ""
     
     if ! confirm "Continuer l'installation?" "y"; then
@@ -792,20 +927,32 @@ show_help() {
     echo ""
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Options:"
-    echo "  --help, -h        Affiche cette aide"
-    echo "  --branch, -b      Affiche un menu pour choisir la branche à installer"
-    echo "  --uninstall, -u   Désinstalle Motion Frontend"
-    echo "  --update          Met à jour l'installation existante"
+    echo "Options générales:"
+    echo "  --help, -h              Affiche cette aide"
+    echo "  --branch, -b            Affiche un menu pour choisir la branche à installer"
+    echo "  --uninstall, -u         Désinstalle Motion Frontend"
+    echo "  --update                Met à jour l'installation existante"
     echo ""
-    echo "Installation rapide (branche main):"
-    echo "  curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash"
+    echo "Configuration Meeting (optionnel):"
+    echo "  --device-key KEY        Device Key pour le service Meeting"
+    echo "  --token TOKEN           Token code pour le service Meeting"
+    echo "  --server-url URL        URL du serveur Meeting"
+    echo "  --skip-meeting          Ne pas demander la configuration Meeting"
     echo ""
-    echo "Installation avec choix de branche:"
-    echo "  curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch"
+    echo "Exemples:"
     echo ""
-    echo "Désinstallation:"
-    echo "  curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall"
+    echo "  Installation rapide (branche main):"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash"
+    echo ""
+    echo "  Installation avec choix de branche:"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch"
+    echo ""
+    echo "  Installation avec configuration Meeting:"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- \\"
+    echo "      --device-key YOUR_DEVICE_KEY --token YOUR_TOKEN --server-url https://meeting.example.com"
+    echo ""
+    echo "  Désinstallation:"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall"
     echo ""
 }
 
@@ -816,6 +963,7 @@ show_help() {
 main() {
     local action="install"
     SELECT_BRANCH=false
+    SKIP_MEETING_CONFIG=false
     SELECTED_BRANCH="$DEFAULT_BRANCH"
     
     # Parse arguments
@@ -835,6 +983,22 @@ main() {
                 ;;
             --update)
                 action="update"
+                shift
+                ;;
+            --device-key)
+                MEETING_DEVICE_KEY="$2"
+                shift 2
+                ;;
+            --token)
+                MEETING_TOKEN_CODE="$2"
+                shift 2
+                ;;
+            --server-url)
+                MEETING_SERVER_URL="$2"
+                shift 2
+                ;;
+            --skip-meeting)
+                SKIP_MEETING_CONFIG=true
                 shift
                 ;;
             *)
