@@ -1,4 +1,4 @@
-# File Version: 0.24.0
+# File Version: 0.25.0
 from __future__ import annotations
 
 import json
@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from . import updater
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +229,7 @@ class ConfigStore:
         # Default values
         self.hostname = "motion-frontend-dev"
         self._theme = "dark"
-        self._frontend_version = "0.24.0"
+        # Note: frontend_version is now a property that reads dynamically from CHANGELOG.md
         self._motion_version: Optional[str] = None
         self._update_available: Optional[str] = None
         self._cameras: Dict[str, CameraConfig] = {}
@@ -512,7 +514,7 @@ class ConfigStore:
 
         return {
             "general": [
-                {"id": "frontendVersion", "label": "Version Frontend", "type": "str", "value": self._frontend_version, "readonly": True},
+                {"id": "frontendVersion", "label": "Version Frontend", "type": "str", "value": self.frontend_version, "readonly": True},
                 {"id": "motionVersion", "label": "Version Motion", "type": "str", "value": motion_status, "readonly": True},
                 {"id": "updateStatus", "label": "Mise à jour", "type": "str", "value": update_status, "readonly": True},
                 {"id": "separator1", "type": "separator", "label": "Système"},
@@ -1191,3 +1193,8 @@ class ConfigStore:
     @property
     def meeting_heartbeat_interval(self) -> int:
         return self._meeting_heartbeat_interval
+
+    @property
+    def frontend_version(self) -> str:
+        """Get frontend version dynamically from CHANGELOG.md."""
+        return updater.get_current_version()

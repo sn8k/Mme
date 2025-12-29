@@ -5,6 +5,8 @@
 ### Dynamic Version Detection
 - **FIXED**: Frontend version now reads dynamically from CHANGELOG.md on each request instead of being cached at server startup.
 - **CHANGED**: VersionHandler uses `updater.get_current_version()` for live version retrieval.
+- **CHANGED**: ConfigStore now uses a `frontend_version` property that reads dynamically instead of a hardcoded `_frontend_version` attribute.
+- **REMOVED**: Hardcoded `self._frontend_version = "0.24.0"` in ConfigStore.
 
 ### Improved Update UX - Server Restart Handling
 - **NEW**: Automatic retry mechanism when server restarts during update.
@@ -22,6 +24,7 @@
 
 ### File Version Updates
 - handlers.py: v0.24.0 → v0.25.0
+- config_store.py: v0.24.0 → v0.25.0
 - main.js: v0.31.0 → v0.32.0
 - main.css: v0.22.0 → v0.23.0
 - CHANGELOG.md: v0.33.0 → v0.34.0
