@@ -1,4 +1,4 @@
-# File Version: 0.30.6
+# File Version: 0.30.7
 from __future__ import annotations
 
 import json
@@ -892,28 +892,33 @@ class ConfigStore:
     def _get_stream_url_html(self, cam: CameraConfig, camera_id: str) -> str:
         """Generate HTML for stream URL display.
         
-        Displays the dedicated MJPEG port URL (http://IP:{mjpeg_port}/stream/).
-        Each camera has its own HTTP server on a dedicated port (8081, 8082, etc.).
-        This works for both internal MJPEG server and can be configured for Motion.
+        URL depends on stream source:
+        - Motion/Auto: Use proxy endpoint (http://IP:8765/stream/{camera_id}/)
+          because Motion listens on localhost only
+        - Internal: Use dedicated MJPEG port (http://IP:{mjpeg_port}/stream/)
+          which is accessible directly
         """
         server_ip = _get_local_ip()
+        server_port = _get_server_port()
         
-        # Use dedicated MJPEG port per camera
-        stream_url = f"http://{server_ip}:{cam.mjpeg_port}/stream/"
-        
-        if cam.stream_source == "motion":
-            source_hint = "(Motion)"
-        elif cam.stream_source == "internal":
-            source_hint = "(interne)"
+        # Determine URL based on stream source
+        if cam.stream_source == "internal":
+            # Internal MJPEG server has dedicated port accessible from network
+            stream_url = f"http://{server_ip}:{cam.mjpeg_port}/stream/"
+            source_hint = "(serveur dédié)"
+            data_attrs = f"data-mjpeg-port='{cam.mjpeg_port}'"
         else:
-            source_hint = "(auto)"
+            # Motion or Auto: use proxy endpoint (Motion listens on localhost)
+            stream_url = f"http://{server_ip}:{server_port}/stream/{camera_id}/"
+            source_hint = "(proxy Motion)" if cam.stream_source == "motion" else "(auto/proxy)"
+            data_attrs = f"data-server-port='{server_port}'"
         
         auth_hint = " 🔒" if cam.stream_auth_enabled else ""
         
         return f"""<code id='streamUrlDisplay' class='stream-url' 
             data-camera-id='{camera_id}' 
             data-stream-source='{cam.stream_source or "auto"}'
-            data-mjpeg-port='{cam.mjpeg_port}' 
+            {data_attrs}
             data-server-ip='{server_ip}'>{stream_url}</code> 
             <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>
             <small class='stream-source-hint'>{source_hint}{auth_hint}</small>"""

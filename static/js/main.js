@@ -1,4 +1,4 @@
-/* File Version: 0.38.3 */
+/* File Version: 0.38.4 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -2960,10 +2960,20 @@
         const urlDisplay = document.getElementById('streamUrlDisplay');
         if (!urlDisplay) return;
         
-        // Build full URL using server IP and dedicated MJPEG port
-        const mjpegPort = urlDisplay.dataset.mjpegPort || '8081';
         const serverIp = urlDisplay.dataset.serverIp || window.location.hostname;
-        const fullUrl = `http://${serverIp}:${mjpegPort}/stream/`;
+        const streamSource = urlDisplay.dataset.streamSource || 'auto';
+        const cameraId = urlDisplay.dataset.cameraId || '1';
+        
+        let fullUrl;
+        if (streamSource === 'internal') {
+            // Internal MJPEG server - use dedicated port
+            const mjpegPort = urlDisplay.dataset.mjpegPort || '8081';
+            fullUrl = `http://${serverIp}:${mjpegPort}/stream/`;
+        } else {
+            // Motion or Auto - use proxy endpoint on main server port
+            const serverPort = urlDisplay.dataset.serverPort || window.location.port || '8765';
+            fullUrl = `http://${serverIp}:${serverPort}/stream/${cameraId}/`;
+        }
         
         navigator.clipboard.writeText(fullUrl).then(() => {
             motionFrontendUI.showToast('URL copiée dans le presse-papier', 'success');

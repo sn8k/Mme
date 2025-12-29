@@ -1,5 +1,27 @@
-<!-- File Version: 0.38.11 -->
+<!-- File Version: 0.38.12 -->
 # Changelog
+
+## 0.38.12 - 2025-12-30
+### Fix: Stream URL Now Reflects Actual Access Path
+- **BUG FIX**: Stream URL displayed was inaccessible when using Motion source.
+- **ROOT CAUSE**: URL showed `http://IP:8081/stream/` but:
+  - Motion listens on `127.0.0.1` only (not accessible from network)
+  - Our internal MJPEG server on port 8081 is NOT started when Motion is the source
+- **SOLUTION**: URL now depends on stream source:
+  - **Internal**: `http://IP:{mjpeg_port}/stream/` (dedicated HTTP server, directly accessible)
+  - **Motion/Auto**: `http://IP:8765/stream/{camera_id}/` (proxy through Tornado)
+
+### Architecture Clarification
+| Source | URL | Server |
+|--------|-----|--------|
+| Internal | `http://IP:8081/stream/` | Dedicated HTTP server per camera |
+| Motion | `http://IP:8765/stream/1/` | Tornado proxy → localhost:8081 |
+| Auto | `http://IP:8765/stream/1/` | Auto-detect, uses proxy |
+
+### File Version Updates
+- config_store.py: v0.30.6 → v0.30.7
+- main.js: v0.38.3 → v0.38.4
+- CHANGELOG.md: v0.38.11 → v0.38.12
 
 ## 0.38.11 - 2025-12-30
 ### Fix: MJPEG Port Configuration and URL Display
