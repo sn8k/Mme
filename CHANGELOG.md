@@ -1,5 +1,49 @@
-<!-- File Version: 0.36.0 -->
+<!-- File Version: 0.36.2 -->
 # Changelog
+
+## 0.36.2 - 2025-12-29
+### RTSP Streaming - Linux/Raspberry Pi Fixes
+- **FIXED**: RTSP now properly checks if MediaMTX port is listening on Linux (not just binary existence).
+- **FIXED**: MediaMTX service auto-start with retry loop and port verification.
+- **FIXED**: Removed duplicate error logging code.
+- **IMPROVED**: Service startup waits up to 5 seconds for port to become available.
+- **IMPROVED**: Better error handling if MediaMTX service fails to start.
+
+### Technical Changes
+- `backend/rtsp_server.py`: `is_rtsp_server_available()` now checks port on both platforms.
+- `backend/rtsp_server.py`: Added retry loop when starting MediaMTX service.
+- `backend/rtsp_server.py`: Proper error propagation if service startup fails.
+
+### File Version Updates
+- rtsp_server.py: v0.5.0 → v0.5.1
+- CHANGELOG.md: v0.36.1 → v0.36.2
+
+## 0.36.1 - 2025-12-29
+### RTSP Streaming Fixes & Improvements
+- **FIXED**: RTSP server now properly logs all actions for debugging.
+- **FIXED**: MediaMTX service startup now uses `sudo` for proper permissions.
+- **FIXED**: Windows now properly checks if RTSP server is listening before starting stream.
+- **NEW**: RTSP URL is now displayed in the streaming section (like MJPEG URL).
+- **NEW**: Copy button for RTSP URL with visual feedback.
+- **NEW**: Clear error message when no RTSP server is running on Windows.
+- **IMPROVED**: MediaMTX check is now platform-aware (Windows checks port, Linux checks binary).
+- **IMPROVED**: Detailed FFmpeg command logging when starting RTSP stream.
+- **IMPROVED**: MediaMTX detection now checks common Linux install locations.
+
+### Technical Changes
+- `backend/rtsp_server.py`: Added `_is_rtsp_port_listening()` method for Windows port check.
+- `backend/rtsp_server.py`: Added detailed logging for RTSP stream start/stop.
+- `backend/rtsp_server.py`: `is_rtsp_server_available()` checks port on Windows, binary on Linux.
+- `backend/rtsp_server.py`: MediaMTX startup now uses `sudo systemctl start mediamtx`.
+- `backend/rtsp_server.py`: Platform-specific error messages for missing RTSP server.
+- `backend/config_store.py`: Added `_get_rtsp_url_html()` method for RTSP URL display.
+- `backend/config_store.py`: Added `rtspUrl` field in camera_rtsp section.
+- `static/css/main.css`: Added `.rtsp-enabled` and `.rtsp-disabled` CSS classes.
+
+### File Version Updates
+- rtsp_server.py: v0.4.1 → v0.5.0
+- config_store.py: v0.28.0 → v0.29.0
+- CHANGELOG.md: v0.36.0 → v0.36.1
 
 ## 0.36.0 - 2025-12-29
 ### Automatic Post-Update Repair

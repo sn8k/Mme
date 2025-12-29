@@ -65,7 +65,7 @@ MmE/
 │   ├── jinja.py               # Configuration Jinja2 (v0.1.3)
 │   ├── meeting_service.py     # Service Meeting API heartbeat (v0.4.0)
 │   ├── mjpeg_server.py        # Serveur MJPEG streaming dédié (v0.9.0)
-│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.4.1)
+│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.5.0)
 │   ├── server.py              # Point d'entrée serveur (v0.15.0)
 │   ├── settings.py            # Paramètres serveur (v0.1.0)
 │   ├── updater.py             # Module de mise à jour GitHub (v1.2.0)

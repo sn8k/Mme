@@ -1,4 +1,4 @@
-# File Version: 0.28.0
+# File Version: 0.29.0
 from __future__ import annotations
 
 import json
@@ -678,6 +678,23 @@ class ConfigStore:
         
         return choices
 
+    def _get_rtsp_url_html(self, cam: CameraConfig, camera_id: str) -> str:
+        """Generate HTML for RTSP URL display."""
+        server_ip = _get_local_ip()
+        rtsp_port = 8554 + int(camera_id) - 1
+        rtsp_path = f"/cam{camera_id}"
+        rtsp_url = f"rtsp://{server_ip}:{rtsp_port}{rtsp_path}"
+        
+        # Show the URL whether RTSP is enabled or not (informational)
+        enabled_class = "rtsp-enabled" if cam.rtsp_enabled else "rtsp-disabled"
+        status_hint = "" if cam.rtsp_enabled else " <small class='text-muted'>(activer RTSP pour utiliser)</small>"
+        
+        return f"""<code id='rtspUrlDisplay_{camera_id}' class='stream-url {enabled_class}' 
+            data-camera-id='{camera_id}' 
+            data-rtsp-port='{rtsp_port}' 
+            data-rtsp-path='{rtsp_path}'
+            data-server-ip='{server_ip}'>{rtsp_url}</code> 
+            <button type='button' class='btn-copy' onclick="navigator.clipboard.writeText('{rtsp_url}'); motionFrontendUI.showToast('URL RTSP copiée', 'success');" title='Copier'>📋</button>{status_hint}"""
     def _get_stream_url_html(self, cam: CameraConfig, camera_id: str) -> str:
         """Generate HTML for stream URL display based on stream source."""
         server_ip = _get_local_ip()
@@ -757,6 +774,7 @@ class ConfigStore:
                         <div id="rtspError_{camera_id}" class="rtsp-error" style="display:none;"></div>
                     </div>
                 """},
+                {"id": "rtspUrl", "label": "URL RTSP", "type": "html", "html": self._get_rtsp_url_html(cam, camera_id)},
                 {"id": "rtspAudioDevice", "label": "Périphérique audio", "type": "choices", "choices": self._get_audio_device_choices(), "value": cam.rtsp_audio_device},
                 {"id": "rtspPort", "label": "Port RTSP", "type": "html", "html": f"<code>{8554 + int(camera_id) - 1}</code> <small>(calculé automatiquement)</small>"},
             ],

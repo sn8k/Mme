@@ -1716,6 +1716,16 @@ body.sidebar-open .camera-preview {
     font-size: 0.8rem;
 }
 
+/* RTSP URL display in config section */
+.stream-url.rtsp-enabled {
+    color: var(--success-color);
+}
+
+.stream-url.rtsp-disabled {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
 /* ============================================================================
    Update Modal Styles
    ============================================================================ */

@@ -1,4 +1,4 @@
-# File Version: 0.4.1
+# File Version: 0.5.1
 """
 RTSP Server module for Motion Frontend.
 
@@ -8,6 +8,11 @@ Uses FFmpeg for capture, encoding (H.264 + AAC) and RTSP streaming.
 Cross-platform support:
 - Windows: DirectShow for video, DirectShow/WASAPI for audio
 - Linux: V4L2 for video, ALSA for audio
+
+Requires:
+- FFmpeg for encoding and streaming
+- MediaMTX (or rtsp-simple-server) on Linux as RTSP server
+- On Windows: FFmpeg can push to localhost RTSP URL if a server is running
 """
 
 import asyncio
@@ -408,15 +413,60 @@ class RTSPServer:
             if path:
                 logger.info("Found MediaMTX at: %s", path)
                 return path
+        
+        # On Linux, check common install locations
+        if self._platform != "windows":
+            linux_paths = [
+                Path("/usr/local/bin/mediamtx"),
+                Path("/opt/mediamtx/mediamtx"),
+            ]
+            for lp in linux_paths:
+                if lp.exists():
+                    logger.info("Found MediaMTX at: %s", lp)
+                    return str(lp)
+        
+        logger.debug("MediaMTX not found in PATH or common locations")
         return None
+    
+    def _is_rtsp_port_listening(self, port: int) -> bool:
+        """Check if something is listening on the RTSP port."""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        try:
+            result = sock.connect_ex(('127.0.0.1', port))
+            listening = result == 0
+            logger.debug("Port %d listening check: %s", port, listening)
+            return listening
+        except Exception as e:
+            logger.debug("Port %d check failed: %s", port, e)
+            return False
+        finally:
+            sock.close()
     
     def is_rtsp_server_available(self) -> bool:
         """Check if a proper RTSP server is available (MediaMTX/rtsp-simple-server).
         
         Note: FFmpeg alone cannot create an RTSP server - it can only push to one.
         MediaMTX or rtsp-simple-server is required to receive the stream.
+        
+        On both platforms, checks if something is listening on the default RTSP port.
+        On Linux, also checks if MediaMTX binary exists (for installation status).
         """
-        return self._find_mediamtx() is not None
+        # First check if port is listening (works on both platforms)
+        if self._is_rtsp_port_listening(self._base_rtsp_port):
+            logger.info("RTSP server detected on port %d", self._base_rtsp_port)
+            return True
+        
+        # On Linux, check if MediaMTX binary exists (may need to start service)
+        if self._platform != "windows":
+            mediamtx_path = self._find_mediamtx()
+            if mediamtx_path:
+                logger.info("MediaMTX binary found at %s but service not listening", mediamtx_path)
+                return True  # Binary exists, we'll try to start it in start_stream()
+            
+        logger.warning("No RTSP server available on port %d", self._base_rtsp_port)
+        return False
         
     def _get_rtsp_output_args(self, config: RTSPStreamConfig) -> List[str]:
         """Get FFmpeg RTSP output arguments."""
@@ -482,38 +532,80 @@ class RTSPServer:
         )
         
         # Check if RTSP server (MediaMTX) is available
+        logger.info("Checking RTSP server availability for camera %s on port %d...", camera_id, config.rtsp_port)
         if not self.is_rtsp_server_available():
             status.is_running = False
-            status.error = (
-                "MediaMTX not found. "
-                "Run 'sudo bash scripts/install_motion_frontend.sh --repair' to install it, "
-                "or use the MJPEG stream instead."
-            )
-            logger.error("RTSP server (MediaMTX) not found - run --repair to install")
+            if self._platform == "windows":
+                status.error = (
+                    f"No RTSP server listening on port {self._base_rtsp_port}. "
+                    "Please start MediaMTX or another RTSP server first. "
+                    "Download MediaMTX from: https://github.com/bluenviron/mediamtx/releases"
+                )
+                logger.error("No RTSP server listening on port %d (Windows)", self._base_rtsp_port)
+            else:
+                status.error = (
+                    "MediaMTX not found. "
+                    "Run 'sudo bash scripts/install_motion_frontend.sh --repair' to install it, "
+                    "or use the MJPEG stream instead."
+                )
+                logger.error("RTSP server (MediaMTX) not found - run --repair to install")
             self._stream_status[camera_id] = status
             return status
         
-        # Check if MediaMTX service is running
+        # On Linux, ensure MediaMTX service is running
         if self._platform != "windows":
-            try:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "mediamtx"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode != 0:
-                    # Try to start it
-                    logger.warning("MediaMTX service not running, attempting to start...")
-                    subprocess.run(["systemctl", "start", "mediamtx"], timeout=10)
-            except Exception as e:
-                logger.warning("Could not check/start MediaMTX service: %s", e)
+            if not self._is_rtsp_port_listening(config.rtsp_port):
+                logger.info("MediaMTX not listening on port %d, attempting to start service...", config.rtsp_port)
+                try:
+                    # Check if service exists
+                    result = subprocess.run(
+                        ["systemctl", "is-active", "mediamtx"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    logger.debug("MediaMTX service status: %s (code %d)", result.stdout.strip(), result.returncode)
+                    
+                    if result.returncode != 0:
+                        # Try to start it with sudo
+                        logger.warning("MediaMTX service not running, attempting to start with sudo...")
+                        start_result = subprocess.run(
+                            ["sudo", "systemctl", "start", "mediamtx"],
+                            capture_output=True,
+                            text=True,
+                            timeout=15
+                        )
+                        if start_result.returncode != 0:
+                            logger.error("Failed to start MediaMTX service: %s", start_result.stderr)
+                            status.is_running = False
+                            status.error = f"Failed to start MediaMTX service: {start_result.stderr}"
+                            self._stream_status[camera_id] = status
+                            return status
+                        else:
+                            logger.info("MediaMTX service started successfully")
+                            # Wait for the service to be ready
+                            import time
+                            for i in range(5):
+                                time.sleep(1)
+                                if self._is_rtsp_port_listening(config.rtsp_port):
+                                    logger.info("MediaMTX now listening on port %d", config.rtsp_port)
+                                    break
+                            else:
+                                logger.warning("MediaMTX service started but port %d not yet listening", config.rtsp_port)
+                    else:
+                        logger.info("MediaMTX service is active")
+                except Exception as e:
+                    logger.error("Could not check/start MediaMTX service: %s", e)
         
         try:
             cmd, has_audio = self._build_ffmpeg_command(config)
             status.has_audio = has_audio
             
-            logger.info("Starting RTSP stream for camera %s: %s", camera_id, " ".join(cmd))
+            logger.info("="*60)
+            logger.info("Starting RTSP stream for camera %s", camera_id)
+            logger.info("FFmpeg command: %s", " ".join(cmd))
+            logger.info("Target RTSP URL: rtsp://127.0.0.1:%d%s", config.rtsp_port, config.rtsp_path)
+            logger.info("="*60)
             
             # Start FFmpeg process
             if self._platform == "windows":
