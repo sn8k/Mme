@@ -1,14 +1,53 @@
-<!-- File Version: 0.3.0 -->
+<!-- File Version: 0.4.0 -->
 # Motion Frontend Rebuild
 
 This repository hosts Motion Frontend, our fully owned control surface that supersedes the legacy UI described in [docs/cahier_des_charges.md](docs/cahier_des_charges.md) and [TODOs/TODO_frontend.md](TODOs/TODO_frontend.md). The target is a lightweight, headless-friendly UI served by the existing Tornado backend on Raspberry Pi systems.
+
+## Quick Start - Raspberry Pi OS (Debian Trixie)
+
+### One-liner Installation
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash
+```
+
+### Installation with Branch Selection
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch
+```
+
+### Uninstallation
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
+```
+
+### Post-Installation
+
+After installation, access the web interface at:
+- **Local**: `http://localhost:8765`
+- **Network**: `http://<raspberry-pi-ip>:8765`
+
+Default credentials:
+- **Username**: `admin`
+- **Password**: `admin` (change on first login)
+
+Service management:
+```bash
+sudo systemctl status motion-frontend   # Check status
+sudo systemctl restart motion-frontend  # Restart
+sudo journalctl -u motion-frontend -f   # View logs
+```
+
+---
 
 ## Objectives
 - Deliver a cohesive replacement for the historic surveillance UI while keeping a modern yet dependency-free toolchain (vanilla HTML/CSS/JS rendered via Jinja2).
 - Keep development fully cross-platform (Windows dev, Raspberry Pi deploy) while staying within the CPU/RAM budgets outlined in the cahier des charges.
 - Enforce project-wide rules: strict i18n coverage, file-level semantic versioning (`X.Y.Z[letter]`), changelog-first releases, and documented install/update flows.
 
-## Planned Structure
+## Project Structure
 ```
 templates/
   base.html

@@ -1,7 +1,7 @@
-<!-- File Version: 1.17.0 -->
+<!-- File Version: 1.18.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.29.0  
+> **Version** : 0.30.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -103,6 +103,7 @@ MmE/
 │   └── manifest.json          # PWA manifest
 │
 ├── scripts/                    # Scripts d'automatisation
+│   ├── install_motion_frontend.sh    # Installeur Raspberry Pi OS (v1.0.0)
 │   ├── install_motion_frontend.ps1   # Installeur Windows
 │   └── run_motion_frontend.ps1       # Lanceur développement
 │
@@ -114,10 +115,9 @@ MmE/
 ├── TODOs/                      # Suivi des tâches
 │   └── TODO_frontend.md
 │
-├── CHANGELOG.md               # Historique des versions (v0.5.0)
-└── README.md                  # Guide de démarrage (v0.3.0)
+├── CHANGELOG.md               # Historique des versions (v0.30.0)
+└── README.md                  # Guide de démarrage (v0.4.0)
 ```
-
 ### 2.2 Diagramme de flux
 
 ```
@@ -1303,7 +1303,140 @@ Les configurations caméra sont organisées en sections thématiques dans l'inte
 
 ## 8. Scripts d'installation et lancement
 
-### 8.1 Lanceur Windows (`run_motion_frontend.ps1`)
+### 8.1 Installeur Raspberry Pi OS (`install_motion_frontend.sh`)
+
+Script shell complet pour l'installation automatisée sur Raspberry Pi OS (Debian Trixie).
+
+#### 8.1.1 Installation rapide
+
+```bash
+# Installation avec la branche main (défaut)
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash
+```
+
+#### 8.1.2 Installation avec choix de branche
+
+```bash
+# Affiche un menu interactif pour choisir la branche
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch
+```
+
+#### 8.1.3 Désinstallation
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
+```
+
+#### 8.1.4 Mise à jour
+
+```bash
+# Mise à jour depuis la branche main
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --update
+
+# Mise à jour avec choix de branche
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --update --branch
+```
+
+#### 8.1.5 Options de ligne de commande
+
+| Option | Description |
+|--------|-------------|
+| `--help`, `-h` | Affiche l'aide |
+| `--branch`, `-b` | Menu de sélection de branche |
+| `--uninstall`, `-u` | Désinstalle le projet |
+| `--update` | Met à jour l'installation existante |
+
+#### 8.1.6 Fonctionnement détaillé
+
+**Étapes d'installation** :
+1. Vérification système (Linux/Debian, architecture, Raspberry Pi)
+2. Vérification de la connexion Internet
+3. Installation des dépendances système :
+   - `python3`, `python3-pip`, `python3-venv`, `python3-dev`
+   - `git`, `curl`, `wget`, `build-essential`
+   - `ffmpeg`, `v4l-utils`, `alsa-utils`
+   - `python3-opencv`, `libopencv-dev`
+4. Création de l'utilisateur système `motion-frontend`
+5. Ajout aux groupes : `video`, `audio`, `gpio`, `i2c`, `spi`
+6. Téléchargement du code source depuis GitHub
+7. Création de l'environnement virtuel Python
+8. Installation des dépendances Python (`requirements.txt`)
+9. Configuration par défaut
+10. Création du service systemd
+11. Démarrage automatique du service
+
+**Répertoires créés** :
+
+| Chemin | Description |
+|--------|-------------|
+| `/opt/motion-frontend/` | Répertoire d'installation principal |
+| `/opt/motion-frontend/.venv/` | Environnement virtuel Python |
+| `/opt/motion-frontend/config/` | Configuration de l'application |
+| `/etc/motion-frontend/` | Configuration système (réservé) |
+| `/var/log/motion-frontend/` | Journaux d'exécution |
+
+**Service systemd** :
+
+```ini
+[Unit]
+Description=Motion Frontend - Web Interface for Video Surveillance
+After=network-online.target
+
+[Service]
+Type=simple
+User=motion-frontend
+Group=motion-frontend
+WorkingDirectory=/opt/motion-frontend
+ExecStart=/opt/motion-frontend/.venv/bin/python -m backend.server --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Commandes de gestion du service** :
+
+```bash
+# Statut
+sudo systemctl status motion-frontend
+
+# Démarrer
+sudo systemctl start motion-frontend
+
+# Arrêter
+sudo systemctl stop motion-frontend
+
+# Redémarrer
+sudo systemctl restart motion-frontend
+
+# Logs en temps réel
+sudo journalctl -u motion-frontend -f
+```
+
+**Identifiants par défaut** :
+- Utilisateur : `admin`
+- Mot de passe : `admin` (à changer à la première connexion)
+
+#### 8.1.7 Désinstallation
+
+La désinstallation :
+1. Arrête et désactive le service systemd
+2. Supprime le fichier service
+3. Propose de sauvegarder la configuration
+4. Supprime le répertoire d'installation
+5. Supprime les logs
+6. Propose de supprimer l'utilisateur et le groupe système
+
+Les dépendances système (python3, ffmpeg, etc.) ne sont pas supprimées.
+
+### 8.2 Lanceur Windows (`run_motion_frontend.ps1`)
 
 ```powershell
 # Usage simple
@@ -1322,7 +1455,7 @@ Les configurations caméra sont organisées en sections thématiques dans l'inte
 2. Sonde `/health` jusqu'à succès (timeout 30s)
 3. Ouvre le navigateur par défaut
 
-### 8.2 Installeur Windows (`install_motion_frontend.ps1`)
+### 8.3 Installeur Windows (`install_motion_frontend.ps1`)
 
 ```powershell
 # Installation

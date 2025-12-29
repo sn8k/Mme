@@ -1,5 +1,37 @@
-<!-- File Version: 0.29.0 -->
+<!-- File Version: 0.30.0 -->
 # Changelog
+
+## 0.30.0 - 2025-12-29
+### Raspberry Pi OS Installer
+- **NEW**: Complete shell installer for Raspberry Pi OS (Debian Trixie).
+- **NEW**: One-liner installation command via curl from GitHub.
+- **NEW**: `--branch` option to select installation branch interactively.
+- **NEW**: `--uninstall` option for complete removal.
+- **NEW**: `--update` option to update existing installation.
+- **NEW**: Automatic service user and group creation (`motion-frontend`).
+- **NEW**: User automatically added to video, audio, gpio, i2c, spi groups.
+- **NEW**: systemd service creation with security hardening.
+- **NEW**: Python virtual environment setup in `/opt/motion-frontend`.
+- **NEW**: Automatic dependencies installation (Python, ffmpeg, opencv, etc.).
+- **NEW**: Configuration backup and restore during updates.
+- **NEW**: Colored terminal output with progress indicators.
+
+### Installation Commands
+```bash
+# Quick install (main branch)
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash
+
+# Install with branch selection
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch
+
+# Uninstall
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
+```
+
+### File Version Updates
+- **NEW**: install_motion_frontend.sh: v1.0.0
+- CHANGELOG.md: v0.29.0 → v0.30.0
+- TECHNICAL_DOCUMENTATION.md: v1.17.0 → v1.18.0
 
 ## 0.29.0 - 2025-12-29
 ### Update from Source Feature
