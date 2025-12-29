@@ -1,4 +1,4 @@
-# File Version: 0.15.0
+# File Version: 0.16.0
 from __future__ import annotations
 
 import argparse
@@ -17,6 +17,7 @@ from .handlers import (
     CameraAddHandler,
     CameraCapabilitiesHandler,
     CameraConfigSectionsHandler,
+    CameraControlsHandler,
     CameraDeleteHandler,
     CameraDetectHandler,
     CameraFilterPatternsHandler,
@@ -93,6 +94,7 @@ def _build_routes(static_path: Path) -> Sequence[Route]:
         (r"/api/config/camera/(?P<camera_id>[\w-]+)/delete/?", CameraDeleteHandler, None),
         (r"/api/cameras/detect/?", CameraDetectHandler, None),
         (r"/api/cameras/capabilities/(?P<device_path>.+)/?", CameraCapabilitiesHandler, None),
+        (r"/api/cameras/controls/(?P<device_path>.+)/?", CameraControlsHandler, None),
         (r"/api/cameras/filters/?", CameraFilterPatternsHandler, None),
         # Audio routes
         (r"/api/config/audio/add/?", AudioAddHandler, None),

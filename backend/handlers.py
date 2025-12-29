@@ -1,4 +1,4 @@
-# File Version: 0.23.0
+# File Version: 0.24.0
 from __future__ import annotations
 
 import base64
@@ -481,6 +481,81 @@ class CameraCapabilitiesHandler(BaseHandler):
         
         capabilities = server.detect_camera_capabilities(device_path)
         self.write_json(capabilities)
+
+
+class CameraControlsHandler(BaseHandler):
+    """Detect and manage camera controls (brightness, contrast, etc.)."""
+    
+    async def get(self, device_path: str) -> None:
+        """Get available controls for a camera device.
+        
+        Args:
+            device_path: Device path or index (URL encoded).
+            
+        Returns:
+            JSON with list of available controls.
+        """
+        from . import camera_detector
+        import urllib.parse
+        
+        device_path = urllib.parse.unquote(device_path)
+        controls = camera_detector.detect_camera_controls(device_path)
+        
+        self.write_json({
+            "device": device_path,
+            "controls": controls,
+            "count": len(controls),
+        })
+    
+    async def post(self, device_path: str) -> None:
+        """Set a camera control value.
+        
+        Args:
+            device_path: Device path or index (URL encoded).
+            
+        Request body:
+            {
+                "control_id": "brightness",
+                "value": 50
+            }
+        """
+        from . import camera_detector
+        import urllib.parse
+        
+        device_path = urllib.parse.unquote(device_path)
+        payload = tornado.escape.json_decode(self.request.body or b"{}")
+        
+        control_id = payload.get("control_id")
+        value = payload.get("value")
+        
+        if not control_id:
+            self.write_json({"error": "control_id is required"}, status=400)
+            return
+        
+        if value is None:
+            self.write_json({"error": "value is required"}, status=400)
+            return
+        
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            self.write_json({"error": "value must be an integer"}, status=400)
+            return
+        
+        success = camera_detector.set_camera_control(device_path, control_id, value)
+        
+        if success:
+            self.write_json({
+                "status": "ok",
+                "device": device_path,
+                "control_id": control_id,
+                "value": value,
+            })
+        else:
+            self.write_json({
+                "error": f"Failed to set {control_id}",
+                "device": device_path,
+            }, status=500)
 
 
 class CameraFilterPatternsHandler(BaseHandler):
@@ -1426,6 +1501,7 @@ HANDLER_EXPORTS = [
     CameraDetectHandler,
     CameraFilterPatternsHandler,
     CameraCapabilitiesHandler,
+    CameraControlsHandler,
     LoggingConfigHandler,
     HealthHandler,
     FrameHandler,

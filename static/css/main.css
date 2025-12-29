@@ -1,4 +1,4 @@
-/* File Version: 0.21.0 */
+/* File Version: 0.22.0 */
 .app-header {
     display: flex;
     justify-content: space-between;
@@ -1982,4 +1982,112 @@ body.sidebar-open .camera-preview {
 .button-warning:disabled {
     background: var(--bg-tertiary);
     color: var(--text-muted);
+}
+
+/* ============================================================================
+ * Camera Controls Detection
+ * ============================================================================ */
+
+.btn-detect {
+    padding: 0.4rem 0.8rem;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-blue-darker));
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.btn-detect:hover {
+    background: linear-gradient(135deg, var(--accent-blue-darker), var(--accent-blue));
+    transform: translateY(-1px);
+}
+
+.btn-detect:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: wait;
+    transform: none;
+}
+
+.detect-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.3rem;
+    font-style: italic;
+}
+
+/* Camera control rows */
+.camera-control-row {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.camera-control-row:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.camera-control-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.camera-control-range input[type="range"] {
+    flex: 1;
+    min-width: 100px;
+}
+
+.camera-control-range .range-value {
+    min-width: 40px;
+    text-align: right;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.btn-reset {
+    padding: 0.2rem 0.4rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.btn-reset:hover {
+    background: var(--accent-orange);
+    color: white;
+    border-color: var(--accent-orange);
+}
+
+.no-controls {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+
+.no-controls.error {
+    color: var(--accent-red);
+}
+
+#cameraControlsContainer {
+    display: contents;
+}
+
+/* Settings separator */
+.settings-separator td {
+    padding-top: 1rem;
+    border-bottom: none;
+}
+
+.settings-section-subtitle {
+    margin: 0;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
 }

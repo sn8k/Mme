@@ -1,7 +1,7 @@
-<!-- File Version: 1.19.0 -->
+<!-- File Version: 1.20.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.32.0  
+> **Version** : 0.33.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -576,6 +576,89 @@ GET /api/cameras/capabilities/<device_path>
 ```
 
 Cette API permet de découvrir dynamiquement les résolutions supportées par une caméra pour proposer des options adaptées dans l'interface.
+
+#### Détection des contrôles d'une caméra
+```
+GET /api/cameras/controls/<device_path>
+```
+
+Détecte tous les contrôles disponibles sur une caméra (luminosité, contraste, saturation, gain, exposition, balance des blancs, etc.).
+
+**Exemple de réponse** :
+```json
+{
+  "device": "/dev/video0",
+  "controls": [
+    {
+      "id": "brightness",
+      "name": "Brightness",
+      "type": "int",
+      "value": 128,
+      "default": 128,
+      "min": 0,
+      "max": 255,
+      "step": 1
+    },
+    {
+      "id": "auto_exposure",
+      "name": "Auto Exposure",
+      "type": "menu",
+      "value": 3,
+      "default": 3,
+      "min": 0,
+      "max": 3,
+      "step": 1,
+      "menu_items": {
+        "1": "Manual Mode",
+        "3": "Aperture Priority Mode"
+      }
+    },
+    {
+      "id": "backlight_compensation",
+      "name": "Backlight",
+      "type": "bool",
+      "value": 0,
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "step": 1
+    }
+  ],
+  "count": 3
+}
+```
+
+**Types de contrôles** :
+- `int` : Valeur numérique avec min/max/step
+- `bool` : Booléen (0 ou 1)
+- `menu` : Liste d'options avec `menu_items`
+
+**Plateformes** :
+- **Linux** : V4L2 via `v4l2-ctl --list-ctrls-menus`
+- **Windows** : OpenCV DirectShow properties
+
+#### Modifier un contrôle caméra
+```
+POST /api/cameras/controls/<device_path>
+```
+
+**Corps de la requête** :
+```json
+{
+  "control_id": "brightness",
+  "value": 150
+}
+```
+
+**Exemple de réponse** :
+```json
+{
+  "status": "ok",
+  "device": "/dev/video0",
+  "control_id": "brightness",
+  "value": 150
+}
+```
 
 #### Gestion des filtres de caméras
 ```

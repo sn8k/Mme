@@ -1,4 +1,4 @@
-# File Version: 0.23.0
+# File Version: 0.24.0
 from __future__ import annotations
 
 import json
@@ -626,6 +626,7 @@ class ConfigStore:
                     {"value": "2560x1440", "label": "2560x1440 (2K)"},
                     {"value": "3840x2160", "label": "3840x2160 (4K)"},
                 ], "value": cam.resolution},
+                {"id": "detectResolutions", "label": "", "type": "html", "html": '<button type="button" id="detectResolutionsBtn" class="btn-detect" title="Détecter les résolutions disponibles">🔍 Détecter</button>'},
                 {"id": "framerate", "label": "Images/sec capture", "type": "number", "value": cam.framerate, "min": 1, "max": 60},
                 {"id": "rotation", "label": "Rotation", "type": "choices", "choices": [
                     {"value": "0", "label": "0°"},
@@ -638,6 +639,9 @@ class ConfigStore:
                 {"id": "brightness", "label": "Luminosité", "type": "range", "value": cam.brightness, "min": -100, "max": 100},
                 {"id": "contrast", "label": "Contraste", "type": "range", "value": cam.contrast, "min": -100, "max": 100},
                 {"id": "saturation", "label": "Saturation", "type": "range", "value": cam.saturation, "min": -100, "max": 100},
+                {"id": "imageSeparator", "label": "Contrôles avancés", "type": "separator"},
+                {"id": "detectControls", "label": "", "type": "html", "html": '<button type="button" id="detectCameraControlsBtn" class="btn-detect">🔍 Détecter les contrôles</button><div class="detect-hint">Détecte les contrôles disponibles sur le périphérique (V4L2/DirectShow)</div>'},
+                {"id": "cameraControls", "label": "", "type": "html", "html": '<tbody id="cameraControlsContainer"></tbody>'},
             ],
             "camera_streaming": [
                 {"id": "streamEnabled", "label": "Streaming actif", "type": "bool", "value": cam.enabled},

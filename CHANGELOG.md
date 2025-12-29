@@ -1,5 +1,36 @@
-<!-- File Version: 0.32.0 -->
+<!-- File Version: 0.33.0 -->
 # Changelog
+
+## 0.33.0 - 2025-12-29
+### Dynamic Camera Capabilities Detection
+- **NEW**: Automatic detection of supported camera resolutions from device.
+- **NEW**: Detection of all available camera controls (brightness, contrast, saturation, gain, exposure, white balance, etc.).
+- **NEW**: Cross-platform support for camera controls:
+  - **Linux**: V4L2 controls via `v4l2-ctl --list-ctrls-menus`
+  - **Windows**: OpenCV/DirectShow property detection
+- **NEW**: Real-time control adjustment - changes are applied immediately to the camera.
+- **NEW**: Reset button on each control to restore default value.
+- **NEW**: Support for all V4L2 control types: int (slider), bool (switch), menu (dropdown).
+
+### UI Enhancements
+- **NEW**: "Détecter" button in Video Parameters section to detect available resolutions.
+- **NEW**: "Détecter les contrôles" button in Image section for advanced camera controls.
+- **NEW**: Dynamic controls display with range sliders, switches, and dropdown menus.
+- **CHANGED**: Image section now has basic controls (brightness, contrast, saturation) plus an "Advanced Controls" subsection.
+
+### API Changes
+- **NEW**: `GET /api/cameras/controls/<device_path>` - Get available controls for a camera.
+- **NEW**: `POST /api/cameras/controls/<device_path>` - Set a camera control value.
+- **EXISTING**: `GET /api/cameras/capabilities/<device_path>` - Now properly used by frontend for resolution detection.
+
+### File Version Updates
+- camera_detector.py: v0.1.0 → v0.2.0
+- handlers.py: v0.23.0 → v0.24.0
+- server.py: v0.15.0 → v0.16.0
+- config_store.py: v0.23.0 → v0.24.0
+- main.js: v0.30.0 → v0.31.0
+- main.css: v0.21.0 → v0.22.0
+- CHANGELOG.md: v0.32.0 → v0.33.0
 
 ## 0.32.0 - 2025-12-29
 ### Repair Function for Raspberry Pi Installer

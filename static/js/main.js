@@ -1,4 +1,4 @@
-/* File Version: 0.30.0 */
+/* File Version: 0.31.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -702,6 +702,287 @@
                 }
             }
         });
+        
+        // Bind resolution detection button
+        const detectResBtn = document.getElementById('detectResolutionsBtn');
+        if (detectResBtn) {
+            detectResBtn.addEventListener('click', () => detectCameraResolutions());
+        }
+        
+        // Bind camera controls detection button  
+        const detectControlsBtn = document.getElementById('detectCameraControlsBtn');
+        if (detectControlsBtn) {
+            detectControlsBtn.addEventListener('click', () => detectCameraControls());
+        }
+    }
+    
+    /**
+     * Detect available resolutions for the current camera device.
+     */
+    async function detectCameraResolutions() {
+        const deviceInput = document.getElementById('deviceUrlEntry');
+        if (!deviceInput || !deviceInput.value) {
+            motionFrontendUI.showToast('Veuillez d\'abord configurer une source vidéo', 'warning');
+            return;
+        }
+        
+        const devicePath = deviceInput.value;
+        const resolutionSelect = document.getElementById('resolutionSelect');
+        const detectBtn = document.getElementById('detectResolutionsBtn');
+        
+        if (!resolutionSelect) return;
+        
+        // Show loading state
+        if (detectBtn) {
+            detectBtn.disabled = true;
+            detectBtn.textContent = '⏳';
+        }
+        
+        try {
+            const encodedPath = encodeURIComponent(devicePath);
+            const data = await apiGet(`/api/cameras/capabilities/${encodedPath}`);
+            
+            if (data.error) {
+                motionFrontendUI.showToast(`Erreur: ${data.error}`, 'error');
+                return;
+            }
+            
+            const resolutions = data.supported_resolutions || [];
+            if (resolutions.length === 0) {
+                motionFrontendUI.showToast('Aucune résolution détectée', 'warning');
+                return;
+            }
+            
+            // Keep current value
+            const currentValue = resolutionSelect.value;
+            
+            // Resolution labels mapping
+            const resLabels = {
+                '320x240': 'QVGA',
+                '352x288': 'CIF',
+                '640x360': 'nHD',
+                '640x480': 'VGA',
+                '800x600': 'SVGA',
+                '960x540': 'qHD',
+                '1024x576': 'WSVGA',
+                '1024x768': 'XGA',
+                '1280x720': '720p HD',
+                '1280x960': 'SXGA-',
+                '1280x1024': 'SXGA',
+                '1600x900': 'HD+',
+                '1920x1080': '1080p Full HD',
+                '2560x1440': 'QHD 2K',
+                '3840x2160': '4K UHD',
+            };
+            
+            // Update dropdown with detected resolutions
+            resolutionSelect.innerHTML = resolutions.map(res => {
+                const label = resLabels[res] ? `${res} (${resLabels[res]})` : res;
+                const selected = res === currentValue ? 'selected' : '';
+                return `<option value="${res}" ${selected}>${label}</option>`;
+            }).join('');
+            
+            // If current value not in list, add it
+            if (currentValue && !resolutions.includes(currentValue)) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = currentValue + ' (actuel)';
+                opt.selected = true;
+                resolutionSelect.insertBefore(opt, resolutionSelect.firstChild);
+            }
+            
+            motionFrontendUI.showToast(`${resolutions.length} résolution(s) détectée(s)`, 'success');
+            checkDirty();
+            
+        } catch (error) {
+            motionFrontendUI.showToast(`Erreur de détection: ${error.message}`, 'error');
+        } finally {
+            if (detectBtn) {
+                detectBtn.disabled = false;
+                detectBtn.textContent = '🔍';
+            }
+        }
+    }
+    
+    /**
+     * Detect available camera controls (brightness, contrast, etc.)
+     */
+    async function detectCameraControls() {
+        const deviceInput = document.getElementById('deviceUrlEntry');
+        if (!deviceInput || !deviceInput.value) {
+            motionFrontendUI.showToast('Veuillez d\'abord configurer une source vidéo', 'warning');
+            return;
+        }
+        
+        const devicePath = deviceInput.value;
+        const controlsContainer = document.getElementById('cameraControlsContainer');
+        const detectBtn = document.getElementById('detectCameraControlsBtn');
+        
+        if (!controlsContainer) return;
+        
+        // Show loading state
+        if (detectBtn) {
+            detectBtn.disabled = true;
+            detectBtn.textContent = '⏳ Détection...';
+        }
+        
+        try {
+            const encodedPath = encodeURIComponent(devicePath);
+            const data = await apiGet(`/api/cameras/controls/${encodedPath}`);
+            
+            const controls = data.controls || [];
+            
+            if (controls.length === 0) {
+                controlsContainer.innerHTML = `
+                    <tr class="settings-item">
+                        <td colspan="2" class="no-controls">
+                            <em>Aucun contrôle détecté pour ce périphérique</em>
+                        </td>
+                    </tr>
+                `;
+                motionFrontendUI.showToast('Aucun contrôle détecté', 'info');
+                return;
+            }
+            
+            // Render detected controls
+            controlsContainer.innerHTML = controls.map(ctrl => renderCameraControl(ctrl, devicePath)).join('');
+            
+            // Bind event handlers for controls
+            bindCameraControlHandlers(devicePath);
+            
+            motionFrontendUI.showToast(`${controls.length} contrôle(s) détecté(s)`, 'success');
+            
+        } catch (error) {
+            motionFrontendUI.showToast(`Erreur de détection: ${error.message}`, 'error');
+            controlsContainer.innerHTML = `
+                <tr class="settings-item">
+                    <td colspan="2" class="no-controls error">
+                        <em>Erreur: ${escapeHtml(error.message)}</em>
+                    </td>
+                </tr>
+            `;
+        } finally {
+            if (detectBtn) {
+                detectBtn.disabled = false;
+                detectBtn.textContent = '🔍 Détecter les contrôles';
+            }
+        }
+    }
+    
+    /**
+     * Render a single camera control.
+     */
+    function renderCameraControl(ctrl, devicePath) {
+        const encodedPath = encodeURIComponent(devicePath);
+        let controlHtml = '';
+        
+        if (ctrl.type === 'bool') {
+            controlHtml = `
+                <label class="switch">
+                    <input type="checkbox" class="camera-control" 
+                           data-control-id="${ctrl.id}" 
+                           data-device="${encodedPath}"
+                           ${ctrl.value ? 'checked' : ''}>
+                    <span class="slider"></span>
+                </label>
+            `;
+        } else if (ctrl.type === 'menu' && ctrl.menu_items) {
+            const options = Object.entries(ctrl.menu_items).map(([val, label]) => 
+                `<option value="${val}" ${parseInt(val) === ctrl.value ? 'selected' : ''}>${escapeHtml(label)}</option>`
+            ).join('');
+            controlHtml = `
+                <select class="styled camera-control" 
+                        data-control-id="${ctrl.id}" 
+                        data-device="${encodedPath}">
+                    ${options}
+                </select>
+            `;
+        } else {
+            // int type - use range slider
+            controlHtml = `
+                <div class="range-field camera-control-range">
+                    <input type="range" class="styled camera-control" 
+                           data-control-id="${ctrl.id}" 
+                           data-device="${encodedPath}"
+                           min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}" 
+                           value="${ctrl.value}">
+                    <span class="range-value">${ctrl.value}</span>
+                    <button type="button" class="btn-reset" 
+                            data-default="${ctrl.default}"
+                            title="Réinitialiser (${ctrl.default})">↺</button>
+                </div>
+            `;
+        }
+        
+        return `
+            <tr class="settings-item camera-control-row" data-control-id="${ctrl.id}">
+                <td class="settings-label">
+                    <label>${escapeHtml(ctrl.name)}</label>
+                </td>
+                <td class="settings-control">
+                    ${controlHtml}
+                </td>
+            </tr>
+        `;
+    }
+    
+    /**
+     * Bind event handlers for camera controls.
+     */
+    function bindCameraControlHandlers(devicePath) {
+        // Range sliders
+        document.querySelectorAll('.camera-control[type="range"]').forEach(input => {
+            const valueSpan = input.parentElement.querySelector('.range-value');
+            
+            input.addEventListener('input', () => {
+                if (valueSpan) valueSpan.textContent = input.value;
+            });
+            
+            input.addEventListener('change', () => {
+                setCameraControl(input.dataset.device, input.dataset.controlId, parseInt(input.value));
+            });
+        });
+        
+        // Checkboxes (bool controls)
+        document.querySelectorAll('.camera-control[type="checkbox"]').forEach(input => {
+            input.addEventListener('change', () => {
+                setCameraControl(input.dataset.device, input.dataset.controlId, input.checked ? 1 : 0);
+            });
+        });
+        
+        // Select menus
+        document.querySelectorAll('select.camera-control').forEach(select => {
+            select.addEventListener('change', () => {
+                setCameraControl(select.dataset.device, select.dataset.controlId, parseInt(select.value));
+            });
+        });
+        
+        // Reset buttons
+        document.querySelectorAll('.btn-reset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const rangeInput = btn.parentElement.querySelector('input[type="range"]');
+                if (rangeInput) {
+                    const defaultVal = parseInt(btn.dataset.default);
+                    rangeInput.value = defaultVal;
+                    rangeInput.dispatchEvent(new Event('input'));
+                    rangeInput.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    }
+    
+    /**
+     * Set a camera control value via API.
+     */
+    async function setCameraControl(encodedDevice, controlId, value) {
+        try {
+            await apiPost(`/api/cameras/controls/${encodedDevice}`, {
+                control_id: controlId,
+                value: value
+            });
+        } catch (error) {
+            motionFrontendUI.showToast(`Erreur: ${error.message}`, 'error');
+        }
     }
 
     function loadAllConfigs() {
