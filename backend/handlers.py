@@ -1,9 +1,10 @@
-# File Version: 0.27.0
+# File Version: 0.28.0
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
+import logging
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from . import meeting_service
 from . import updater
 from . import rtsp_server
 from .user_manager import get_user_manager, UserManager, UserRole, User
+
+logger = logging.getLogger(__name__)
 
 _PLACEHOLDER_FRAME = base64.b64decode(
     b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8\n/w8AAuMBg6RYw1cAAAAASUVORK5CYII="
@@ -320,19 +323,28 @@ class ConfigCameraHandler(BaseHandler):
         
         # Handle RTSP enable/disable
         rtsp = rtsp_server.get_rtsp_server()
+        logger.info("RTSP config change: old_enabled=%s, new_enabled=%s, audio=%s", 
+                    old_rtsp_enabled, new_rtsp_enabled, new_rtsp_audio)
+        
         if new_rtsp_enabled and not old_rtsp_enabled:
             # Enable RTSP - start the stream
+            logger.info("RTSP: Starting stream for camera %s", camera_id)
             result["rtsp_action"] = "starting"
             try:
                 camera = self.config_store.get_camera(camera_id)
+                logger.debug("RTSP: Camera config: %s", camera)
+                logger.debug("RTSP: FFmpeg available: %s", rtsp.is_ffmpeg_available())
+                
                 if camera and rtsp.is_ffmpeg_available():
                     # Stop MJPEG stream first to release camera (Windows can only have one process access camera)
                     mjpeg = mjpeg_server.get_mjpeg_server()
                     if mjpeg:
+                        logger.info("RTSP: Stopping MJPEG stream to release camera")
                         mjpeg.stop_camera(camera_id)
                         result["mjpeg_stopped"] = True
                     
                     rtsp_port = rtsp.get_rtsp_port_for_camera(camera_id)
+                    logger.info("RTSP: Using port %d for camera %s", rtsp_port, camera_id)
                     
                     # Build stream config
                     config = rtsp_server.RTSPStreamConfig(
@@ -345,9 +357,12 @@ class ConfigCameraHandler(BaseHandler):
                         rtsp_port=rtsp_port,
                         rtsp_path=f"/cam{camera_id}",
                     )
+                    logger.debug("RTSP: Stream config: device=%s, name=%s, resolution=%s, fps=%d",
+                                config.camera_device, config.camera_name, config.resolution, config.framerate)
                     
                     # Add audio if selected
                     if new_rtsp_audio:
+                        logger.info("RTSP: Adding audio device: %s", new_rtsp_audio)
                         audio = self.config_store.get_audio_device(new_rtsp_audio)
                         if audio and audio.enabled:
                             config.audio_device_id = audio.device_id
@@ -356,27 +371,38 @@ class ConfigCameraHandler(BaseHandler):
                             config.audio_channels = audio.channels
                             config.audio_bitrate = audio.bitrate
                             config.audio_codec = audio.codec
+                            logger.debug("RTSP: Audio config: id=%s, rate=%d, channels=%d",
+                                        audio.device_id, audio.sample_rate, audio.channels)
                     
+                    logger.info("RTSP: Calling start_stream()...")
                     status = await rtsp.start_stream(config)
+                    logger.info("RTSP: start_stream() returned: running=%s, url=%s, error=%s",
+                               status.is_running, status.rtsp_url, status.error)
                     result["rtsp_started"] = status.is_running
                     result["rtsp_url"] = status.rtsp_url
                     result["rtsp_error"] = status.error
                 else:
-                    result["rtsp_error"] = "FFmpeg not available" if not rtsp.is_ffmpeg_available() else "Camera not found"
+                    error_msg = "FFmpeg not available" if not rtsp.is_ffmpeg_available() else "Camera not found"
+                    logger.error("RTSP: Cannot start - %s", error_msg)
+                    result["rtsp_error"] = error_msg
             except Exception as e:
+                logger.exception("RTSP: Exception while starting stream")
                 result["rtsp_error"] = str(e)
                 
         elif not new_rtsp_enabled and old_rtsp_enabled:
             # Disable RTSP - stop the stream
+            logger.info("RTSP: Stopping stream for camera %s", camera_id)
             result["rtsp_action"] = "stopping"
             try:
                 await rtsp.stop_stream(camera_id)
                 result["rtsp_stopped"] = True
+                logger.info("RTSP: Stream stopped successfully")
                 
                 # Restart MJPEG stream now that camera is free
                 mjpeg = mjpeg_server.get_mjpeg_server()
                 camera = self.config_store.get_camera(camera_id)
                 if mjpeg and camera and camera.enabled:
+                    logger.info("RTSP: Restarting MJPEG stream")
                     mjpeg.start_camera(camera_id)
                     result["mjpeg_restarted"] = True
             except Exception as e:

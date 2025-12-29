@@ -1,5 +1,20 @@
-<!-- File Version: 0.36.2 -->
+<!-- File Version: 0.36.3 -->
 # Changelog
+
+## 0.36.3 - 2025-12-29
+### RTSP Logging - Critical Fix
+- **FIXED**: Added missing logger to handlers.py - RTSP actions were not logged at all!
+- **NEW**: Comprehensive RTSP logging in CameraConfigHandler for full debugging.
+- **NEW**: Logs show: config changes, FFmpeg status, port, stream config, audio config, start/stop results.
+
+### Technical Changes
+- `backend/handlers.py`: Added `import logging` and `logger = logging.getLogger(__name__)`.
+- `backend/handlers.py`: Added 15+ log statements in RTSP enable/disable flow.
+- Log levels: INFO for main events, DEBUG for detailed config, ERROR for failures.
+
+### File Version Updates
+- handlers.py: v0.27.0 → v0.28.0
+- CHANGELOG.md: v0.36.2 → v0.36.3
 
 ## 0.36.2 - 2025-12-29
 ### RTSP Streaming - Linux/Raspberry Pi Fixes
