@@ -764,6 +764,12 @@ ExecStart=${VENV_DIR}/bin/python -m backend.server \\
     --port ${DEFAULT_PORT} \\
     --root ${INSTALL_DIR}
 
+# Graceful shutdown: send SIGTERM, wait up to 15 seconds for clean exit
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Restart policy
 Restart=always
 RestartSec=5
 StartLimitBurst=5

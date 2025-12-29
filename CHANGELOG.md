@@ -1,5 +1,27 @@
-<!-- File Version: 0.35.5 -->
+<!-- File Version: 0.35.6 -->
 # Changelog
+
+## 0.35.6 - 2025-12-29
+### Graceful Shutdown & Service Restart Improvements
+- **FIXED**: Service restart now properly releases ports before new process starts.
+- **FIXED**: Graceful shutdown stops MJPEG, RTSP, and Meeting services before exiting.
+- **NEW**: `_wait_for_port_available()` method waits up to 10s for port to become free.
+- **NEW**: `SO_REUSEPORT` socket option added (Linux 3.9+) for faster port reuse.
+- **IMPROVED**: Systemd service now uses `KillMode=mixed` and `TimeoutStopSec=15`.
+- **IMPROVED**: Signal handler now properly stops all services in correct order.
+- **INFO**: If ports are blocked by external process, server logs detailed error.
+
+### Technical Changes
+- `_graceful_stop()`: Now stops MJPEG, RTSP, and Meeting services before HTTP server.
+- `_wait_for_port_available()`: New method to wait for port with configurable timeout.
+- `_start_http_server()`: Checks port availability before attempting to bind.
+- Systemd service: Added `KillMode=mixed`, `KillSignal=SIGTERM`, `TimeoutStopSec=15`.
+
+### File Version Updates
+- mjpeg_server.py: v0.9.3 → v0.9.4
+- server.py: v0.18.0 → v0.19.0
+- install_motion_frontend.sh: Updated systemd service configuration
+- CHANGELOG.md: v0.35.5 → v0.35.6
 
 ## 0.35.5 - 2025-12-29
 ### Service Restart & Camera Stability Fixes

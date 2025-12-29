@@ -4,7 +4,7 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.3
+Version: 0.9.4
 """
 
 import asyncio
@@ -313,6 +313,45 @@ class MJPEGServer:
             logger.error("Failed to generate placeholder frame: %s", e)
             self.PLACEHOLDER_FRAME = b''
     
+    def _wait_for_port_available(self, port: int, timeout: int = 10) -> bool:
+        """Wait for a port to become available.
+        
+        This is useful when restarting the service, as the previous process
+        may still be holding the port for a moment.
+        
+        Args:
+            port: The port number to check.
+            timeout: Maximum time to wait in seconds.
+            
+        Returns:
+            True if port is available, False if timeout reached.
+        """
+        start_time = time.time()
+        check_interval = 0.5
+        
+        while time.time() - start_time < timeout:
+            try:
+                test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                test_socket.bind(("0.0.0.0", port))
+                test_socket.close()
+                logger.debug("Port %d is now available", port)
+                return True
+            except OSError as e:
+                if e.errno in (98, 10048):  # Address already in use (Linux/Windows)
+                    elapsed = time.time() - start_time
+                    logger.debug("Port %d still in use, waiting... (%.1fs elapsed)", port, elapsed)
+                    time.sleep(check_interval)
+                else:
+                    logger.warning("Unexpected error checking port %d: %s", port, e)
+                    return False
+            except Exception as e:
+                logger.warning("Error checking port %d availability: %s", port, e)
+                return False
+        
+        logger.warning("Timeout waiting for port %d to become available", port)
+        return False
+    
     def _start_http_server(self, camera: CameraStream, retries: int = 5) -> bool:
         """Start dedicated HTTP server for a camera's MJPEG stream.
         
@@ -328,6 +367,13 @@ class MJPEGServer:
             self._stop_http_server(camera)
             time.sleep(0.5)  # Wait for port to be released
         
+        # Wait for port to be available (in case previous process is still shutting down)
+        if not self._wait_for_port_available(camera.mjpeg_port, timeout=10):
+            logger.error("Port %d is still in use after waiting, cannot start camera %s", 
+                        camera.mjpeg_port, camera.camera_id)
+            camera.error = f"Port {camera.mjpeg_port} is in use by another process"
+            return False
+        
         for attempt in range(retries):
             try:
                 # Create handler class with reference to this camera
@@ -336,6 +382,12 @@ class MJPEGServer:
                 # Create HTTP server on the configured port
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                # Also set SO_REUSEPORT if available (Linux 3.9+)
+                if hasattr(socket, 'SO_REUSEPORT'):
+                    try:
+                        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                    except (OSError, AttributeError):
+                        pass  # Not supported on this system
                 server_socket.bind(("0.0.0.0", camera.mjpeg_port))
                 server_socket.listen(5)
                 

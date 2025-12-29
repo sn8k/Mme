@@ -1,4 +1,4 @@
-# File Version: 0.18.0
+# File Version: 0.19.0
 from __future__ import annotations
 
 import argparse
@@ -231,8 +231,44 @@ def _configure_logging(level: str, log_to_file: bool = True, reset_on_start: boo
 
 def _attach_signal_handlers(server: tornado.httpserver.HTTPServer, loop: tornado.ioloop.IOLoop) -> None:
     def _graceful_stop(signum: int, _frame: object) -> None:
-        logging.info("Signal %s received, stopping server", signum)
+        logging.info("Signal %s received, initiating graceful shutdown...", signum)
+        
+        # Stop MJPEG server first to release camera resources and ports
+        try:
+            from . import mjpeg_server
+            mjpeg = mjpeg_server.get_mjpeg_server()
+            if mjpeg:
+                logging.info("Stopping all MJPEG streams...")
+                mjpeg.stop_all()
+                logging.info("MJPEG streams stopped")
+        except Exception as e:
+            logging.error("Error stopping MJPEG server: %s", e)
+        
+        # Stop RTSP server
+        try:
+            from . import rtsp_server
+            rtsp = rtsp_server.get_rtsp_server()
+            if rtsp:
+                logging.info("Stopping all RTSP streams...")
+                rtsp.stop_all()
+                logging.info("RTSP streams stopped")
+        except Exception as e:
+            logging.error("Error stopping RTSP server: %s", e)
+        
+        # Stop Meeting service
+        try:
+            from . import meeting_service
+            svc = meeting_service.get_meeting_service()
+            if svc:
+                logging.info("Stopping Meeting service...")
+                svc.stop()
+                logging.info("Meeting service stopped")
+        except Exception as e:
+            logging.error("Error stopping Meeting service: %s", e)
+        
+        # Now stop the HTTP server
         server.stop()
+        logging.info("HTTP server stopped, scheduling IOLoop stop...")
         loop.add_timeout(loop.time() + 0.5, loop.stop)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
