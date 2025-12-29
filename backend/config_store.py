@@ -1,4 +1,4 @@
-# File Version: 0.29.0
+# File Version: 0.29.1
 from __future__ import annotations
 
 import json
@@ -616,11 +616,21 @@ class ConfigStore:
             ],
         }
 
-    def get_cameras(self) -> List[Dict[str, str]]:
-        return [
-            {"id": cam.identifier, "name": cam.name, "enabled": cam.enabled}
-            for cam in self._cameras.values()
-        ]
+    def get_cameras(self) -> List[Dict[str, Any]]:
+        cameras = []
+        for cam in self._cameras.values():
+            camera_data = {
+                "id": cam.identifier,
+                "name": cam.name,
+                "enabled": cam.enabled,
+                "rtsp_enabled": cam.rtsp_enabled,
+            }
+            # Add HLS URL if RTSP is enabled (MediaMTX serves HLS on port 8888)
+            if cam.rtsp_enabled:
+                camera_data["hls_url"] = f"/hls/cam{cam.identifier}/index.m3u8"
+                camera_data["rtsp_port"] = 8554
+            cameras.append(camera_data)
+        return cameras
 
     def get_camera(self, camera_id: str) -> Optional[CameraConfig]:
         return self._cameras.get(camera_id)

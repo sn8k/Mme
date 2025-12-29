@@ -1,4 +1,4 @@
-{# File Version: 0.2.0 #}
+{# File Version: 0.2.1 #}
 <!DOCTYPE html>
 <html lang="{{ lingvo|default('en') }}" class="no-js">
 <head>
@@ -24,6 +24,8 @@
     <script src="{{ static_path }}/vendor/jquery.mousewheel.min.js?v={{ version }}" defer></script>
     <script src="{{ static_path }}/vendor/jquery.timepicker.min.js?v={{ version }}" defer></script>
     <script src="{{ static_path }}/vendor/gettext.min.js?v={{ version }}" defer></script>
+    <!-- HLS.js for RTSP stream playback via HLS proxy -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,4 +1,4 @@
-# File Version: 0.28.1
+# File Version: 0.28.3
 from __future__ import annotations
 
 import base64
@@ -673,14 +673,24 @@ class MJPEGStreamHandler(BaseHandler):
     
     async def get(self, camera_id: str) -> None:
         """Stream MJPEG frames continuously."""
-        # Check if RTSP is active for this camera (MJPEG unavailable when RTSP is using camera)
+        # Check if RTSP is enabled in camera config (blocks MJPEG even during RTSP startup)
+        store = config_store.get_config_store()
+        camera_config = store.get_camera(camera_id)
+        rtsp_enabled_in_config = camera_config and camera_config.rtsp_enabled
+        
+        # Also check if RTSP stream is actually running
         rtsp = rtsp_server.get_rtsp_server()
         rtsp_status = rtsp.get_stream_status(camera_id)
-        if rtsp_status and rtsp_status.is_running:
+        rtsp_is_running = rtsp_status and rtsp_status.is_running
+        
+        # Block MJPEG if RTSP is enabled in config OR if RTSP stream is running
+        if rtsp_enabled_in_config or rtsp_is_running:
+            logger.debug("MJPEG stream blocked for camera %s: rtsp_enabled=%s, rtsp_running=%s",
+                        camera_id, rtsp_enabled_in_config, rtsp_is_running)
             # Return single frame indicating RTSP is active (not a stream)
             self.set_header("Content-Type", "image/svg+xml")
             self.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
-            port = rtsp_status.rtsp_url.split(':')[-1].split('/')[0] if rtsp_status.rtsp_url else '8554'
+            port = rtsp_status.rtsp_url.split(':')[-1].split('/')[0] if rtsp_status and rtsp_status.rtsp_url else '8554'
             svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
                 <rect fill="#1a1a2e" width="100%" height="100%"/>
                 <text x="50%" y="45%" text-anchor="middle" fill="#4ade80" font-family="Arial" font-size="24" font-weight="bold">RTSP Stream Active</text>
@@ -1475,6 +1485,68 @@ class RTSPStreamHandler(BaseHandler):
             self.write_json({"error": f"Unknown action: {action}"}, status=400)
 
 
+class HLSProxyHandler(BaseHandler):
+    """Proxy handler for HLS streams from MediaMTX.
+    
+    MediaMTX serves HLS on port 8888, but we proxy through our server
+    to avoid CORS issues and provide unified access.
+    """
+    
+    MEDIAMTX_HLS_PORT = 8888
+    
+    async def get(self, path: str) -> None:
+        """Proxy HLS requests to MediaMTX."""
+        import aiohttp
+        
+        mediamtx_url = f"http://127.0.0.1:{self.MEDIAMTX_HLS_PORT}/{path}"
+        
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(mediamtx_url) as response:
+                    if response.status != 200:
+                        logger.debug("HLS proxy: MediaMTX returned %d for %s", response.status, path)
+                        self.set_status(response.status)
+                        self.write(await response.text())
+                        return
+                    
+                    # Set appropriate content type
+                    content_type = response.headers.get("Content-Type", "application/octet-stream")
+                    self.set_header("Content-Type", content_type)
+                    
+                    # CORS headers for video playback
+                    self.set_header("Access-Control-Allow-Origin", "*")
+                    self.set_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                    self.set_header("Access-Control-Allow-Headers", "Content-Type")
+                    
+                    # Cache control for HLS segments
+                    if path.endswith(".m3u8"):
+                        # Playlist files should not be cached long
+                        self.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    elif path.endswith(".ts"):
+                        # Video segments can be cached briefly
+                        self.set_header("Cache-Control", "public, max-age=2")
+                    
+                    # Stream the content
+                    self.write(await response.read())
+                    
+        except aiohttp.ClientConnectorError:
+            logger.warning("HLS proxy: Cannot connect to MediaMTX on port %d", self.MEDIAMTX_HLS_PORT)
+            self.set_status(503)
+            self.write_json({"error": "HLS server not available", "hint": "MediaMTX may not be running"})
+        except Exception as e:
+            logger.error("HLS proxy error: %s", e)
+            self.set_status(500)
+            self.write_json({"error": str(e)})
+    
+    def options(self, path: str) -> None:
+        """Handle CORS preflight requests."""
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.set_header("Access-Control-Allow-Headers", "Content-Type")
+        self.set_status(204)
+
+
 # ============================================================================
 # Update Handler
 # ============================================================================
@@ -1686,6 +1758,7 @@ HANDLER_EXPORTS = [
     # RTSP handlers
     RTSPStatusHandler,
     RTSPStreamHandler,
+    HLSProxyHandler,
     # Update handler
     UpdateHandler,
     # Service control handlers

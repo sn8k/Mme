@@ -918,6 +918,31 @@ POST /api/rtsp/1/
 - Sur Windows : FFmpeg avec support DirectShow.
 - Sur Linux : FFmpeg avec support V4L2 et ALSA.
 
+#### API HLS Proxy (pour affichage RTSP dans l'UI)
+
+MediaMTX expose automatiquement les flux RTSP en HLS sur le port 8888. Pour éviter les problèmes CORS et unifier l'accès, un proxy HLS est disponible :
+
+```
+GET /hls/{path}    # Proxy vers MediaMTX HLS (port 8888)
+```
+
+**Exemple** :
+- URL HLS pour caméra 1 : `/hls/cam1/index.m3u8`
+- Cette URL est proxiée vers `http://127.0.0.1:8888/cam1/index.m3u8`
+
+**Comportement UI** :
+- Quand `rtsp_enabled=true` dans la config caméra, l'UI utilise automatiquement HLS via hls.js.
+- Quand `rtsp_enabled=false`, l'UI utilise le flux MJPEG classique.
+- Cela évite tout conflit d'accès à la caméra entre RTSP (FFmpeg) et MJPEG (OpenCV).
+
+**Headers CORS** :
+- `Access-Control-Allow-Origin: *`
+- `Access-Control-Allow-Methods: GET, OPTIONS`
+
+**Gestion du cache** :
+- Fichiers `.m3u8` : `no-cache` (playlist dynamique)
+- Fichiers `.ts` : `max-age=2` (segments vidéo)
+
 #### API Meeting (heartbeat)
 ```
 GET  /api/meeting/     # Statut du service Meeting

@@ -1,4 +1,4 @@
-/* File Version: 0.35.2 */
+/* File Version: 0.36.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -19,6 +19,7 @@
         statsPollingHandle: null,  // Handle for stats polling
         audioDevices: context.audioDevices || [],  // Configured audio devices
         motionStreamInfo: {},  // Store Motion stream info { cameraId: { motion_stream_url, motion_stream_port } }
+        hlsInstances: {},  // Store HLS.js instances per camera { cameraId: Hls instance }
     };
 
     function buildUrl(path) {
@@ -79,6 +80,120 @@
             return (kbps / 1000).toFixed(1) + ' Mb/s';
         }
         return kbps.toFixed(0) + ' Kb/s';
+    }
+
+    // =========================================================================
+    // HLS Stream Management
+    // =========================================================================
+
+    /**
+     * Check if a camera has RTSP enabled in its configuration.
+     * @param {string} cameraId - Camera ID to check.
+     * @returns {boolean} True if RTSP is enabled for this camera.
+     */
+    function isCameraRtspEnabled(cameraId) {
+        const cameras = context.cameras || [];
+        const cam = cameras.find(c => c.id === cameraId);
+        return cam?.rtsp_enabled === true;
+    }
+
+    /**
+     * Get HLS URL for a camera.
+     * @param {string} cameraId - Camera ID.
+     * @returns {string} HLS playlist URL.
+     */
+    function getHlsUrl(cameraId) {
+        return buildUrl(`/hls/cam${cameraId}/index.m3u8`);
+    }
+
+    /**
+     * Start HLS playback for a camera.
+     * @param {string} cameraId - Camera ID.
+     * @param {HTMLVideoElement} videoElement - Video element to attach to.
+     */
+    function startHlsPlayback(cameraId, videoElement) {
+        // Clean up existing instance if any
+        stopHlsPlayback(cameraId);
+
+        const hlsUrl = getHlsUrl(cameraId);
+        console.log(`[HLS] Starting HLS playback for camera ${cameraId}: ${hlsUrl}`);
+
+        if (window.Hls && Hls.isSupported()) {
+            const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 0,
+                maxBufferLength: 2,
+                maxMaxBufferLength: 4,
+                liveSyncDurationCount: 1,
+                liveMaxLatencyDurationCount: 3,
+            });
+            
+            hls.loadSource(hlsUrl);
+            hls.attachMedia(videoElement);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                console.log(`[HLS] Manifest parsed for camera ${cameraId}, starting playback`);
+                videoElement.play().catch(e => console.warn('[HLS] Autoplay blocked:', e));
+            });
+            
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    console.error(`[HLS] Fatal error for camera ${cameraId}:`, data.type, data.details);
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            // Try to recover from network error
+                            console.log('[HLS] Network error, attempting recovery...');
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            console.log('[HLS] Media error, attempting recovery...');
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            // Cannot recover
+                            stopHlsPlayback(cameraId);
+                            motionFrontendUI.showToast(_('HLS stream error'), 'error');
+                            break;
+                    }
+                } else {
+                    console.warn(`[HLS] Non-fatal error for camera ${cameraId}:`, data.type, data.details);
+                }
+            });
+            
+            state.hlsInstances[cameraId] = hls;
+            
+        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native HLS support (Safari)
+            console.log(`[HLS] Using native HLS support for camera ${cameraId}`);
+            videoElement.src = hlsUrl;
+            videoElement.play().catch(e => console.warn('[HLS] Autoplay blocked:', e));
+        } else {
+            console.error('[HLS] HLS not supported in this browser');
+            motionFrontendUI.showToast(_('HLS not supported in this browser'), 'error');
+        }
+    }
+
+    /**
+     * Stop HLS playback for a camera.
+     * @param {string} cameraId - Camera ID.
+     */
+    function stopHlsPlayback(cameraId) {
+        const hls = state.hlsInstances[cameraId];
+        if (hls) {
+            console.log(`[HLS] Stopping HLS playback for camera ${cameraId}`);
+            hls.destroy();
+            delete state.hlsInstances[cameraId];
+        }
+    }
+
+    /**
+     * Stop all HLS playback instances.
+     */
+    function stopAllHlsPlayback() {
+        for (const cameraId of Object.keys(state.hlsInstances)) {
+            stopHlsPlayback(cameraId);
+        }
     }
 
     /**
@@ -1366,13 +1481,15 @@
         const cells = previewGrid.querySelectorAll('.preview-cell');
         
         cells.forEach((cell, index) => {
-            const img = cell.querySelector('.preview-frame');
+            const imgElement = cell.querySelector('.preview-mjpeg');
+            const videoElement = cell.querySelector('.preview-hls');
             const label = cell.querySelector('.preview-label');
             let overlay = cell.querySelector('.stream-details-overlay');
             
             if (cameras[index]) {
                 const cam = cameras[index];
-                const isStreaming = state.streamingCameras.has(cam.id);
+                const isRtspEnabled = cam.rtsp_enabled === true;
+                const isStreaming = state.streamingCameras.has(cam.id) || isRtspEnabled;
                 const isOverlayVisible = state.visibleOverlays.has(cam.id);
                 
                 // Remove empty state
@@ -1385,7 +1502,63 @@
                     cell.querySelector('.frame-container').appendChild(overlay);
                 }
                 
-                if (isStreaming && !state.usePolling) {
+                // Determine which element to show based on stream mode
+                if (isRtspEnabled) {
+                    // === RTSP/HLS MODE ===
+                    // Hide MJPEG img, show HLS video
+                    imgElement.style.display = 'none';
+                    imgElement.src = '';
+                    videoElement.style.display = 'block';
+                    videoElement.dataset.cameraId = cam.id;
+                    
+                    // Start HLS playback if not already started
+                    if (!state.hlsInstances[cam.id]) {
+                        startHlsPlayback(cam.id, videoElement);
+                    }
+                    
+                    // Update overlay for RTSP mode
+                    if (isOverlayVisible) {
+                        overlay.classList.add('visible');
+                        const stats = state.cameraStats[cam.id] || {};
+                        const fpsDisplay = stats.real_fps !== undefined ? stats.real_fps.toFixed(1) : '--';
+                        const resDisplay = (stats.width && stats.height) ? `${stats.width}x${stats.height}` : '--x--';
+                        
+                        overlay.innerHTML = `
+                            <div class="stream-header">
+                                <span class="stream-status live rtsp">RTSP</span>
+                                <span class="stream-info">HLS</span>
+                            </div>
+                            <div class="stream-stats">
+                                <span class="stat-item">FPS: ${fpsDisplay}</span>
+                                <span class="stat-item">${resDisplay}</span>
+                            </div>
+                            <div class="stream-controls">
+                                <button class="stream-control-btn fullscreen-btn" data-camera-id="${cam.id}" title="${_('Full screen')}">
+                                    <svg class="icon-maximize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                                    <svg class="icon-minimize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="display:none"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+                                </button>
+                            </div>
+                        `;
+                        // Bind fullscreen button
+                        const fullscreenBtn = overlay.querySelector('.fullscreen-btn');
+                        if (fullscreenBtn) {
+                            fullscreenBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                toggleFullscreen(fullscreenBtn);
+                            };
+                        }
+                    } else {
+                        overlay.classList.remove('visible');
+                        overlay.innerHTML = '';
+                    }
+                    
+                } else if (isStreaming && !state.usePolling) {
+                    // === MJPEG STREAMING MODE ===
+                    // Stop HLS if running, show MJPEG
+                    stopHlsPlayback(cam.id);
+                    videoElement.style.display = 'none';
+                    imgElement.style.display = 'block';
+                    
                     // Determine stream URL based on source (Motion or internal MJPEG)
                     let streamUrl;
                     let streamType = 'MJPEG';
@@ -1399,8 +1572,8 @@
                         streamUrl = buildUrl(`/stream/${cam.id}/`);
                     }
                     
-                    if (img.src !== streamUrl) {
-                        img.src = streamUrl;
+                    if (imgElement.src !== streamUrl) {
+                        imgElement.src = streamUrl;
                     }
                     // Update streaming details overlay
                     if (isOverlayVisible) {
@@ -1421,10 +1594,10 @@
                                 <span class="stat-item">${bwDisplay}</span>
                             </div>
                             <div class="stream-controls">
-                                <button class="stream-control-btn stop-btn" data-camera-id="${cam.id}" title="Arrêter le stream">
+                                <button class="stream-control-btn stop-btn" data-camera-id="${cam.id}" title="${_('Stop stream')}">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
                                 </button>
-                                <button class="stream-control-btn fullscreen-btn" data-camera-id="${cam.id}" title="Plein écran">
+                                <button class="stream-control-btn fullscreen-btn" data-camera-id="${cam.id}" title="${_('Full screen')}">
                                     <svg class="icon-maximize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
                                     <svg class="icon-minimize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="display:none"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
                                 </button>
@@ -1451,8 +1624,14 @@
                         overlay.innerHTML = '';
                     }
                 } else {
+                    // === POLLING MODE (single frame) ===
+                    // Stop HLS if running
+                    stopHlsPlayback(cam.id);
+                    videoElement.style.display = 'none';
+                    imgElement.style.display = 'block';
+                    
                     // Use single frame with polling - show play button in overlay
-                    img.src = buildUrl(`/frame/${cam.id}/?_ts=${Date.now()}`);
+                    imgElement.src = buildUrl(`/frame/${cam.id}/?_ts=${Date.now()}`);
                     if (isOverlayVisible) {
                         overlay.classList.add('visible');
                         overlay.innerHTML = `
@@ -1465,10 +1644,10 @@
                                 <span class="stat-item">-- Kb/s</span>
                             </div>
                             <div class="stream-controls">
-                                <button class="stream-control-btn play-btn" data-camera-id="${cam.id}" title="Démarrer le stream">
+                                <button class="stream-control-btn play-btn" data-camera-id="${cam.id}" title="${_('Start stream')}">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
                                 </button>
-                                <button class="stream-control-btn fullscreen-btn" data-camera-id="${cam.id}" title="Plein écran">
+                                <button class="stream-control-btn fullscreen-btn" data-camera-id="${cam.id}" title="${_('Full screen')}">
                                     <svg class="icon-maximize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
                                     <svg class="icon-minimize" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="display:none"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
                                 </button>
@@ -1499,7 +1678,7 @@
                 if (label) {
                     label.textContent = cam.name;
                     // Add streaming indicator
-                    if (isStreaming) {
+                    if (isStreaming || isRtspEnabled) {
                         label.classList.add('streaming');
                     } else {
                         label.classList.remove('streaming');
@@ -1509,15 +1688,23 @@
                 // Add click handler to toggle overlay visibility
                 cell.onclick = () => toggleOverlayVisibility(cam.id);
                 cell.style.cursor = 'pointer';
-                cell.title = 'Cliquer pour afficher/masquer les contrôles';
+                cell.title = _('Click to show/hide controls');
             } else {
                 // Show "no camera" placeholder for empty slots
-                img.src = '';
-                img.alt = 'No camera';
+                // Stop any HLS for this cell
+                const oldCameraId = imgElement.dataset.cameraId;
+                if (oldCameraId) {
+                    stopHlsPlayback(oldCameraId);
+                }
+                
+                imgElement.src = '';
+                imgElement.alt = 'No camera';
+                imgElement.style.display = 'block';
+                videoElement.style.display = 'none';
                 if (label) label.textContent = `--`;
                 cell.onclick = null;
                 cell.style.cursor = 'default';
-                cell.title = 'Aucune caméra configurée';
+                cell.title = _('No camera configured');
                 cell.classList.add('empty-slot');
             }
         });

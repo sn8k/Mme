@@ -1,5 +1,53 @@
-<!-- File Version: 0.36.4 -->
+<!-- File Version: 0.37.0 -->
 # Changelog
+
+## 0.37.0 - 2025-12-29
+### HLS Stream Support for RTSP in UI
+- **NEW**: UI now displays RTSP streams via HLS (HTTP Live Streaming) instead of MJPEG polling.
+- **NEW**: When camera has `rtsp_enabled=true`, UI automatically uses HLS player via hls.js.
+- **NEW**: HLS proxy endpoint `/hls/...` proxies requests to MediaMTX (port 8888).
+- **IMPROVED**: No MJPEG requests when RTSP is active - eliminates camera conflicts.
+- **IMPROVED**: Blue "RTSP" badge in overlay distinguishes from red "LIVE" MJPEG badge.
+
+### Frontend Changes
+- Added `<video>` elements alongside `<img>` in preview grid for HLS playback.
+- Added hls.js library (v1.5.7) from CDN for browser HLS support.
+- New functions: `startHlsPlayback()`, `stopHlsPlayback()`, `stopAllHlsPlayback()`, `isCameraRtspEnabled()`.
+- `updatePreviewGrid()` now detects `rtsp_enabled` and switches between MJPEG (img) and HLS (video).
+- State tracking: `state.hlsInstances` stores HLS.js instances per camera.
+
+### Backend Changes
+- `backend/handlers.py`: Added `HLSProxyHandler` to proxy HLS requests to MediaMTX.
+- `backend/server.py`: Added route `/hls/(?P<path>.*)` for HLS proxy.
+- `backend/config_store.py`: `get_cameras()` now returns `rtsp_enabled` and `hls_url`.
+
+### CSS Changes
+- Added `.stream-status.live.rtsp` style with blue color and dedicated animation.
+- Added `@keyframes pulse-rtsp` animation.
+
+### File Version Updates
+- main.js: v0.35.2 → v0.36.0
+- handlers.py: v0.28.2 → v0.28.3
+- server.py: v0.19.0 → v0.19.1
+- config_store.py: v0.29.0 → v0.29.1
+- base.html: v0.2.0 → v0.2.1
+- CHANGELOG.md: v0.36.5 → v0.37.0
+
+## 0.36.5 - 2025-12-29
+### RTSP/MJPEG Stream Endpoint Fix
+- **FIXED**: `/stream/{id}/` endpoint now blocks MJPEG when RTSP is enabled in config.
+- **FIXED**: Camera conflict during RTSP startup - MJPEG stream requests were racing with FFmpeg.
+- **ROOT CAUSE**: `MJPEGStreamHandler` only checked if RTSP was running, not if it was configured.
+- **SOLUTION**: Now checks `camera.rtsp_enabled` in config first, blocking MJPEG before FFmpeg starts.
+- **NEW**: Debug logging shows `rtsp_enabled` and `rtsp_running` status for troubleshooting.
+
+### Technical Changes
+- `backend/handlers.py`: `MJPEGStreamHandler.get()` now checks `config_store.get_camera().rtsp_enabled`.
+- Blocks MJPEG stream if `rtsp_enabled=True` OR `rtsp_status.is_running=True`.
+
+### File Version Updates
+- handlers.py: v0.28.1 → v0.28.2
+- CHANGELOG.md: v0.36.4 → v0.36.5
 
 ## 0.36.4 - 2025-12-29
 ### RTSP/MJPEG Conflict Fix

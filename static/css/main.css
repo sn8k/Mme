@@ -615,6 +615,11 @@ body.sidebar-open .camera-preview {
     animation: pulse-bg 1.5s ease-in-out infinite;
 }
 
+.stream-status.live.rtsp {
+    background: rgba(59, 130, 246, 0.9);
+    animation: pulse-rtsp 1.5s ease-in-out infinite;
+}
+
 .stream-status.offline {
     background: rgba(100, 100, 100, 0.9);
     color: #fff;
@@ -623,6 +628,11 @@ body.sidebar-open .camera-preview {
 @keyframes pulse-bg {
     0%, 100% { background: rgba(220, 38, 38, 0.9); }
     50% { background: rgba(220, 38, 38, 0.6); }
+}
+
+@keyframes pulse-rtsp {
+    0%, 100% { background: rgba(59, 130, 246, 0.9); }
+    50% { background: rgba(59, 130, 246, 0.6); }
 }
 
 .stream-info {

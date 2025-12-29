@@ -335,7 +335,10 @@
                 {% for i in range(32) %}
                 <div class="preview-cell" data-preview-index="{{ i }}">
                     <div class="frame-container">
-                        <img class="preview-frame" alt="{{ _('Preview') }} {{ i + 1 }}" src="" data-camera-id="">
+                        <!-- MJPEG mode: img element -->
+                        <img class="preview-frame preview-mjpeg" alt="{{ _('Preview') }} {{ i + 1 }}" src="" data-camera-id="">
+                        <!-- RTSP/HLS mode: video element (hidden by default) -->
+                        <video class="preview-frame preview-hls" muted autoplay playsinline style="display:none;" data-camera-id=""></video>
                         <div class="preview-overlay">
                             <span class="preview-label">Camera {{ i + 1 }}</span>
                         </div>

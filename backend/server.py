@@ -1,4 +1,4 @@
-# File Version: 0.19.0
+# File Version: 0.19.1
 from __future__ import annotations
 
 import argparse
@@ -54,6 +54,7 @@ from .handlers import (
     # RTSP handlers
     RTSPStatusHandler,
     RTSPStreamHandler,
+    HLSProxyHandler,
 )
 from .jinja import build_environment
 from .settings import ServerSettings
@@ -110,6 +111,8 @@ def _build_routes(static_path: Path) -> Sequence[Route]:
         # RTSP routes
         (r"/api/rtsp/?", RTSPStatusHandler, None),
         (r"/api/rtsp/(?P<camera_id>[\w-]+)/?", RTSPStreamHandler, None),
+        # HLS proxy route (proxies to MediaMTX on port 8888)
+        (r"/hls/(?P<path>.*)/?", HLSProxyHandler, None),
         # Other API routes
         (r"/api/mjpeg/?", MJPEGControlHandler, None),
         (r"/api/meeting/?", MeetingHandler, None),
