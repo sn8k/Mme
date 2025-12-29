@@ -1,4 +1,4 @@
-/* File Version: 0.22.0 */
+/* File Version: 0.23.0 */
 .app-header {
     display: flex;
     justify-content: space-between;
@@ -1861,10 +1861,26 @@ body.sidebar-open .camera-preview {
     background: rgb(239, 68, 68);
 }
 
+.progress-bar-fill.warning {
+    background: linear-gradient(90deg, rgb(251, 191, 36), rgb(245, 158, 11));
+}
+
 .progress-text {
     font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
+}
+
+.progress-text .restart-notice {
+    color: var(--accent);
+    font-style: italic;
+}
+
+#retryProgress {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 0.5rem;
 }
 
 .progress-text strong {

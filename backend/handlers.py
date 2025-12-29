@@ -1,4 +1,4 @@
-# File Version: 0.24.0
+# File Version: 0.25.0
 from __future__ import annotations
 
 import base64
@@ -206,8 +206,13 @@ class MainHandler(TemplateHandler):
 
 class VersionHandler(BaseHandler):
     async def get(self) -> None:
+        from . import updater
+        
+        # Get current version dynamically from CHANGELOG (not cached)
+        current_version = updater.get_current_version()
+        
         payload = self.config_store.get_version_payload(
-            frontend_version=self.application.settings.get("frontend_version", "dev"),
+            frontend_version=current_version,
             commit=self.application.settings.get("git_commit", "dev"),
         )
         self.write_json(payload)

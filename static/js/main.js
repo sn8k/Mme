@@ -1,4 +1,4 @@
-/* File Version: 0.31.0 */
+/* File Version: 0.32.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -1554,6 +1554,35 @@
         }
     }
 
+    /**
+     * Wait for server to come back online after restart.
+     * @param {number} maxRetries - Maximum number of retries
+     * @param {number} retryInterval - Interval between retries in ms
+     * @param {Function} onProgress - Callback for progress updates
+     * @returns {Promise<boolean>} - True if server is back online
+     */
+    async function waitForServerRestart(maxRetries = 30, retryInterval = 2000, onProgress = null) {
+        for (let i = 0; i < maxRetries; i++) {
+            if (onProgress) {
+                onProgress(i + 1, maxRetries);
+            }
+            try {
+                const response = await fetch('/health/', { 
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                if (response.ok) {
+                    return true;
+                }
+            } catch (e) {
+                // Server still down, continue waiting
+            }
+            await new Promise(resolve => setTimeout(resolve, retryInterval));
+        }
+        return false;
+    }
+
     function performUpdate(modal, updateType = 'release', branch = 'main') {
         const progressDiv = document.getElementById('updateProgress');
         const progressText = progressDiv.querySelector('.progress-text');
@@ -1607,15 +1636,83 @@
                     throw new Error(result.error || result.message || 'Update failed');
                 }
             })
-            .catch((error) => {
-                progressFill.style.width = '0%';
-                progressFill.classList.add('error');
-                progressText.textContent = `Update failed: ${error.message}`;
+            .catch(async (error) => {
+                const errorMsg = error.message || String(error);
+                const isNetworkError = errorMsg.toLowerCase().includes('failed to fetch') ||
+                                       errorMsg.toLowerCase().includes('network') ||
+                                       errorMsg.toLowerCase().includes('connection');
                 
-                motionFrontendUI.showToast(`Update failed: ${error.message}`, 'error');
-                
-                if (performBtn) performBtn.disabled = false;
-                if (cancelBtn) cancelBtn.disabled = false;
+                // If it's a network error during update, the server might be restarting
+                if (isNetworkError) {
+                    progressFill.style.width = '70%';
+                    progressFill.classList.remove('error');
+                    progressText.innerHTML = `
+                        <strong>🔄 Server is restarting...</strong><br>
+                        <span class="restart-notice">Please wait while the update is being applied.</span><br>
+                        <span id="retryProgress">Waiting for server... (1/${30})</span>
+                    `;
+                    
+                    // Wait for server to come back
+                    const serverBack = await waitForServerRestart(30, 2000, (current, max) => {
+                        const retrySpan = document.getElementById('retryProgress');
+                        if (retrySpan) {
+                            retrySpan.textContent = `Waiting for server... (${current}/${max})`;
+                        }
+                    });
+                    
+                    if (serverBack) {
+                        progressFill.style.width = '100%';
+                        progressText.innerHTML = `
+                            <strong>✓ Update complete!</strong><br>
+                            <span>Server has been restarted successfully.</span><br>
+                            <span>Reloading page in 3 seconds...</span>
+                        `;
+                        
+                        motionFrontendUI.showToast('Update applied successfully! Reloading...', 'success');
+                        
+                        // Reload page after a short delay
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 3000);
+                    } else {
+                        progressFill.style.width = '100%';
+                        progressFill.classList.add('warning');
+                        progressText.innerHTML = `
+                            <strong>⚠️ Server restart timeout</strong><br>
+                            <span>The server did not respond in time.</span><br>
+                            <span>Please refresh the page manually or check server status.</span>
+                        `;
+                        
+                        if (cancelBtn) {
+                            cancelBtn.disabled = false;
+                            cancelBtn.textContent = 'Close';
+                        }
+                        
+                        // Add reload button
+                        const reloadBtn = document.createElement('button');
+                        reloadBtn.type = 'button';
+                        reloadBtn.className = 'button button-primary';
+                        reloadBtn.textContent = 'Reload Page';
+                        reloadBtn.onclick = () => window.location.reload();
+                        
+                        const footerActions = document.getElementById('releaseActions') || document.getElementById('sourceActions');
+                        if (footerActions) {
+                            footerActions.innerHTML = '';
+                            footerActions.appendChild(reloadBtn);
+                            footerActions.classList.remove('hidden');
+                        }
+                    }
+                } else {
+                    // Regular error, not network related
+                    progressFill.style.width = '0%';
+                    progressFill.classList.add('error');
+                    progressText.textContent = `Update failed: ${errorMsg}`;
+                    
+                    motionFrontendUI.showToast(`Update failed: ${errorMsg}`, 'error');
+                    
+                    if (performBtn) performBtn.disabled = false;
+                    if (cancelBtn) cancelBtn.disabled = false;
+                }
             });
     }
 

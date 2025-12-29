@@ -1,5 +1,30 @@
-<!-- File Version: 0.33.0 -->
+<!-- File Version: 0.34.0 -->
 # Changelog
+
+## 0.34.0 - 2025-12-29
+### Dynamic Version Detection
+- **FIXED**: Frontend version now reads dynamically from CHANGELOG.md on each request instead of being cached at server startup.
+- **CHANGED**: VersionHandler uses `updater.get_current_version()` for live version retrieval.
+
+### Improved Update UX - Server Restart Handling
+- **NEW**: Automatic retry mechanism when server restarts during update.
+- **NEW**: Visual feedback during server restart: "Server is restarting... Please wait"
+- **NEW**: Countdown display showing retry progress (1/30, 2/30, etc.)
+- **NEW**: Automatic page reload when server comes back online after update.
+- **NEW**: "Reload Page" button if server doesn't respond within timeout.
+- **FIXED**: "Failed to fetch" error no longer shown when server restarts during update.
+- **CHANGED**: Network errors during update are now handled gracefully with restart detection.
+
+### CSS Enhancements
+- **NEW**: `.progress-bar-fill.warning` style for intermediate states (amber gradient).
+- **NEW**: `.restart-notice` styling for server restart messages.
+- **NEW**: `#retryProgress` styling for retry countdown display.
+
+### File Version Updates
+- handlers.py: v0.24.0 → v0.25.0
+- main.js: v0.31.0 → v0.32.0
+- main.css: v0.22.0 → v0.23.0
+- CHANGELOG.md: v0.33.0 → v0.34.0
 
 ## 0.33.0 - 2025-12-29
 ### Dynamic Camera Capabilities Detection

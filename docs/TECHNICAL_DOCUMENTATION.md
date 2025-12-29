@@ -1,7 +1,7 @@
-<!-- File Version: 1.20.0 -->
+<!-- File Version: 1.21.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.33.0  
+> **Version** : 0.34.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -417,8 +417,20 @@ GET `/logout` :
 | Endpoint | Méthode | Description |
 |----------|---------|-------------|
 | `/health` | GET | `{"status": "ok"}` |
-| `/version` | GET | Versions frontend/backend |
+| `/version` | GET | Versions frontend/backend (lecture dynamique) |
 | `/login` | GET/POST | Authentification |
+
+**Endpoint /version** :
+
+L'endpoint `/version` retourne les informations de version de l'application. La version frontend est lue **dynamiquement** à chaque requête depuis le fichier `CHANGELOG.md` (via `updater.get_current_version()`), ce qui permet d'afficher la version correcte immédiatement après une mise à jour, sans nécessiter de redémarrage.
+
+```json
+{
+    "frontend_version": "0.34.0",
+    "backend_version": "0.18.0",
+    "commit": "abc1234"
+}
+```
 
 ### 6.2 Endpoints authentifiés
 
@@ -1008,6 +1020,26 @@ POST /api/update/
 5. Extrait et applique les fichiers (sauf `config/` pour préserver les paramètres utilisateur)
 6. Exécute `pip install -r requirements.txt` pour les nouvelles dépendances
 7. Nécessite un redémarrage du serveur pour appliquer les changements
+
+**Gestion du redémarrage serveur** :
+
+Après une mise à jour, le frontend gère automatiquement le redémarrage du serveur :
+
+1. **Détection du redémarrage** : Si une erreur réseau survient pendant ou après la mise à jour (typiquement "Failed to fetch"), le frontend détecte qu'il s'agit probablement d'un redémarrage serveur.
+
+2. **Feedback visuel** : Au lieu d'afficher une erreur, un message informatif s'affiche :
+   - "🔄 Server is restarting... Please wait while the update is being applied."
+   - Un compteur de progression montre l'avancement des tentatives (1/30, 2/30, etc.)
+
+3. **Retry automatique** : Le frontend effectue jusqu'à 30 tentatives de reconnexion (toutes les 2 secondes) via l'endpoint `/health/`.
+
+4. **Reconnexion réussie** : Lorsque le serveur répond à nouveau :
+   - Message de succès : "✓ Update complete! Server has been restarted successfully."
+   - Rechargement automatique de la page après 3 secondes.
+
+5. **Timeout** : Si le serveur ne répond pas après 60 secondes :
+   - Message d'avertissement : "⚠️ Server restart timeout"
+   - Un bouton "Reload Page" permet un rechargement manuel.
 
 **Configuration optionnelle** :
 - Variable d'environnement `GITHUB_TOKEN` : Token GitHub pour augmenter la limite de requêtes API (60 → 5000 req/h)
