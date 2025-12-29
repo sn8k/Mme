@@ -4,7 +4,7 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.5
+Version: 0.9.6
 """
 
 import asyncio
@@ -1112,6 +1112,16 @@ class MJPEGServer:
             v4l2_result = self._detect_v4l2_resolutions(device_path_v4l2)
             if v4l2_result["supported_resolutions"]:
                 return v4l2_result
+            
+            # On Linux, check if Motion is using the camera - don't try OpenCV
+            from . import system_info
+            if system_info.is_motion_running():
+                logger.info("Motion is running, skipping OpenCV detection (camera likely busy)")
+                # Return v4l2 result even if empty, with helpful error
+                if not v4l2_result.get("error"):
+                    v4l2_result["error"] = "Camera may be in use by Motion. Install v4l2-utils for detection while camera is busy."
+                return v4l2_result
+            
             # If v4l2-ctl failed but no error, device might be busy - return partial result
             if not v4l2_result.get("error"):
                 logger.debug("V4L2 detection returned no resolutions for %s", device_path)
@@ -1149,7 +1159,11 @@ class MJPEGServer:
                 result["backend"] = "default"
             
             if not cap.isOpened():
-                result["error"] = f"Cannot open camera device: {device_path}"
+                # More helpful error message
+                if is_linux:
+                    result["error"] = f"Cannot open camera device: {device_path}. The camera may be in use by another application (Motion?)."
+                else:
+                    result["error"] = f"Cannot open camera device: {device_path}"
                 return result
             
             # Get current resolution
@@ -1231,25 +1245,31 @@ class MJPEGServer:
         }
         
         try:
-            # Get supported frame sizes for MJPEG and YUYV formats
-            cmd_result = subprocess.run(
-                ["v4l2-ctl", "-d", device_path, "--list-framesizes=mjpeg"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            # Try multiple pixel formats - cameras support different ones
+            formats_to_try = ["mjpeg", "yuyv", "h264", "nv12", "yuv420", "rgb24"]
+            output = ""
             
-            output = cmd_result.stdout
-            
-            # If MJPEG not available, try YUYV
-            if not output.strip() or cmd_result.returncode != 0:
+            for fmt in formats_to_try:
                 cmd_result = subprocess.run(
-                    ["v4l2-ctl", "-d", device_path, "--list-framesizes=yuyv"],
+                    ["v4l2-ctl", "-d", device_path, f"--list-framesizes={fmt}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if cmd_result.stdout.strip() and cmd_result.returncode == 0:
+                    output += cmd_result.stdout + "\n"
+                    logger.debug("v4l2-ctl: Found resolutions for format %s on %s", fmt, device_path)
+            
+            # If no format-specific sizes found, try listing all formats
+            if not output.strip():
+                cmd_result = subprocess.run(
+                    ["v4l2-ctl", "-d", device_path, "--list-formats-ext"],
                     capture_output=True,
                     text=True,
                     timeout=10
                 )
                 output = cmd_result.stdout
+                logger.debug("v4l2-ctl --list-formats-ext output:\n%s", output)
             
             # Parse discrete sizes: "Size: Discrete 640x480"
             discrete_pattern = r'Size:\s+Discrete\s+(\d+)x(\d+)'
@@ -1260,6 +1280,17 @@ class MJPEGServer:
                 res = f"{width}x{height}"
                 if res not in resolutions:
                     resolutions.append(res)
+            
+            # Also parse from --list-formats-ext format: "[0]: 'MJPG' ... 640x480"
+            ext_pattern = r'(\d+)x(\d+)'
+            if not resolutions:
+                for match in re.finditer(ext_pattern, output):
+                    width, height = int(match.group(1)), int(match.group(2))
+                    # Filter reasonable resolutions (not too small, reasonable aspect ratio)
+                    if width >= 160 and height >= 120 and width <= 4096 and height <= 2160:
+                        res = f"{width}x{height}"
+                        if res not in resolutions:
+                            resolutions.append(res)
             
             # Parse stepwise sizes if no discrete sizes found
             # "Size: Stepwise 160x120 - 1920x1080 with step 8/8"
@@ -1286,9 +1317,11 @@ class MJPEGServer:
                     w, h = map(int, res.split('x'))
                     return w * h
                 
-                result["supported_resolutions"] = sorted(resolutions, key=res_key)
+                result["supported_resolutions"] = sorted(set(resolutions), key=res_key)
                 logger.info("V4L2 detected resolutions for %s: %s", 
                            device_path, result["supported_resolutions"])
+            else:
+                logger.warning("v4l2-ctl found no resolutions for %s", device_path)
             
         except FileNotFoundError:
             logger.debug("v4l2-ctl not found")

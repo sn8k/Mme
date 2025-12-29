@@ -1,5 +1,26 @@
-<!-- File Version: 0.38.12 -->
+<!-- File Version: 0.38.13 -->
 # Changelog
+
+## 0.38.13 - 2025-12-30
+### Fix: Camera Resolution Detection When Motion Is Running
+- **BUG FIX**: Resolution detection failed with "Cannot open camera device" when Motion was using the camera.
+- **IMPROVEMENT**: v4l2-ctl now tries multiple pixel formats (mjpeg, yuyv, h264, nv12, yuv420, rgb24).
+- **IMPROVEMENT**: Falls back to `--list-formats-ext` if specific format queries fail.
+- **IMPROVEMENT**: Skips OpenCV detection entirely when Motion is running (camera is busy).
+- **IMPROVEMENT**: Better error messages explaining why detection failed.
+- **REQUIREMENT**: Install `v4l2-utils` on Raspberry Pi for detection while camera is busy:
+  ```bash
+  sudo apt install v4l-utils
+  ```
+
+### Technical Details
+- `_detect_v4l2_resolutions()`: Now tries 6 different pixel formats instead of just 2.
+- `detect_camera_capabilities()`: Checks if Motion is running before attempting OpenCV.
+- v4l2-ctl works even when the camera device is exclusively opened by another process.
+
+### File Version Updates
+- mjpeg_server.py: v0.9.5 → v0.9.6
+- CHANGELOG.md: v0.38.12 → v0.38.13
 
 ## 0.38.12 - 2025-12-30
 ### Fix: Stream URL Now Reflects Actual Access Path
