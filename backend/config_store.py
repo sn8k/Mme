@@ -1,4 +1,4 @@
-# File Version: 0.30.4
+# File Version: 0.30.6
 from __future__ import annotations
 
 import json
@@ -890,30 +890,33 @@ class ConfigStore:
             data-server-ip='{server_ip}'>{rtsp_url}</code> 
             <button type='button' class='btn-copy' onclick="navigator.clipboard.writeText('{rtsp_url}'); motionFrontendUI.showToast('URL RTSP copiée', 'success');" title='Copier'>📋</button>{status_hint}"""
     def _get_stream_url_html(self, cam: CameraConfig, camera_id: str) -> str:
-        """Generate HTML for stream URL display based on stream source."""
+        """Generate HTML for stream URL display.
+        
+        Displays the dedicated MJPEG port URL (http://IP:{mjpeg_port}/stream/).
+        Each camera has its own HTTP server on a dedicated port (8081, 8082, etc.).
+        This works for both internal MJPEG server and can be configured for Motion.
+        """
         server_ip = _get_local_ip()
         
+        # Use dedicated MJPEG port per camera
+        stream_url = f"http://{server_ip}:{cam.mjpeg_port}/stream/"
+        
         if cam.stream_source == "motion":
-            # Motion stream URL
-            stream_url = f"http://{server_ip}:{cam.motion_stream_port}/"
-            return f"""<code id='streamUrlDisplay' class='stream-url' 
-                data-camera-id='{camera_id}' 
-                data-stream-source='motion'
-                data-motion-port='{cam.motion_stream_port}' 
-                data-server-ip='{server_ip}'>{stream_url}</code> 
-                <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>
-                <small class='stream-source-hint'>(flux Motion)</small>"""
+            source_hint = "(Motion)"
+        elif cam.stream_source == "internal":
+            source_hint = "(interne)"
         else:
-            # Internal MJPEG server URL
-            stream_url = f"http://{server_ip}:{cam.mjpeg_port}/stream/"
-            auth_hint = " <small>(🔒 login requis)</small>" if cam.stream_auth_enabled else ""
-            return f"""<code id='streamUrlDisplay' class='stream-url' 
-                data-camera-id='{camera_id}' 
-                data-stream-source='internal'
-                data-mjpeg-port='{cam.mjpeg_port}' 
-                data-server-ip='{server_ip}' 
-                data-auth-enabled='{str(cam.stream_auth_enabled).lower()}'>{stream_url}</code> 
-                <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>{auth_hint}"""
+            source_hint = "(auto)"
+        
+        auth_hint = " 🔒" if cam.stream_auth_enabled else ""
+        
+        return f"""<code id='streamUrlDisplay' class='stream-url' 
+            data-camera-id='{camera_id}' 
+            data-stream-source='{cam.stream_source or "auto"}'
+            data-mjpeg-port='{cam.mjpeg_port}' 
+            data-server-ip='{server_ip}'>{stream_url}</code> 
+            <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>
+            <small class='stream-source-hint'>{source_hint}{auth_hint}</small>"""
 
     def get_camera_config(self, camera_id: str) -> Dict[str, List[Dict[str, Any]]]:
         """Get camera configuration sections for the UI."""
@@ -946,8 +949,9 @@ class ConfigStore:
             "camera_streaming": [
                 {"id": "streamEnabled", "label": "Streaming actif", "type": "bool", "value": cam.enabled},
                 {"id": "streamSource", "label": "Source du stream", "type": "choices", "choices": self._get_stream_source_choices(), "value": cam.stream_source},
-                {"id": "motionStreamPort", "label": "Port stream Motion", "type": "number", "value": cam.motion_stream_port, "min": 1024, "max": 65535, "depends": "streamSource=motion"},
-                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled, "depends": "streamSource=internal"},
+                {"id": "mjpegPort", "label": "Port MJPEG", "type": "number", "value": cam.mjpeg_port, "min": 1024, "max": 65535},
+                {"id": "motionStreamPort", "label": "Port Motion (si externe)", "type": "number", "value": cam.motion_stream_port, "min": 1024, "max": 65535, "depends": "streamSource=motion"},
+                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled},
                 {"id": "streamUrl", "label": "URL du stream", "type": "html", "html": self._get_stream_url_html(cam, camera_id)},
                 {"id": "streamResolution", "label": "Résolution sortie", "type": "choices", "choices": [
                     {"value": "320x240", "label": "320x240 (QVGA)"},

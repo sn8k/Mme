@@ -1,5 +1,40 @@
-<!-- File Version: 0.38.9 -->
+<!-- File Version: 0.38.11 -->
 # Changelog
+
+## 0.38.11 - 2025-12-30
+### Fix: MJPEG Port Configuration and URL Display
+- **BUG FIX**: Stream URL now correctly shows dedicated MJPEG port (`http://IP:8081/stream/`).
+- **BUG FIX**: MJPEG port setting was missing from UI - now visible in "Streaming MJPEG" section.
+- **CLARIFICATION**: Each camera has its own HTTP server on a dedicated port (8081, 8082, etc.).
+- **UI**: Renamed "Port stream Motion" to "Port Motion (si externe)" to clarify it's only for external Motion daemon.
+- **UI**: Removed `depends` condition from "Authentification requise" - applies to all sources.
+
+### Architecture Notes
+- **Port MJPEG** (8081, 8082...): Port du serveur HTTP dédié par caméra (interne)
+- **Port Motion**: Port du daemon Motion externe (si utilisé comme source)
+- L'URL affichée utilise toujours le port MJPEG dédié
+
+### File Version Updates
+- config_store.py: v0.30.5 → v0.30.6
+- main.js: v0.38.2 → v0.38.3
+- CHANGELOG.md: v0.38.10 → v0.38.11
+
+## 0.38.10 - 2025-12-30
+### Fix: Stream URL Always Uses Proxy Endpoint
+- **BUG FIX**: Stream URL displayed in UI was inaccessible from other devices on LAN.
+- **CAUSE**: When Motion source was selected, URL showed `http://IP:8081/` but Motion listens on `127.0.0.1` only.
+- **SOLUTION**: Stream URL now always shows our proxy endpoint `http://IP:8765/stream/{camera_id}/`.
+- **IMPACT**: Copied URL is accessible from any device on the network.
+
+### Technical Details
+- `_get_stream_url_html()` in config_store.py: Always generates proxy URL, not direct Motion URL.
+- `copyStreamUrl()` in main.js: Updated to use new data attributes (`serverPort`, `cameraId`).
+- Source indicator shows "(proxy Motion)", "(serveur interne)" or "(auto)".
+
+### File Version Updates
+- config_store.py: v0.30.4 → v0.30.5
+- main.js: v0.38.1 → v0.38.2
+- CHANGELOG.md: v0.38.9 → v0.38.10
 
 ## 0.38.9 - 2025-12-30
 ### Fix: Motion Stream Proxy (Complete Fix)

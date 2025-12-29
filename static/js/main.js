@@ -1,4 +1,4 @@
-/* File Version: 0.38.1 */
+/* File Version: 0.38.3 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -2960,7 +2960,7 @@
         const urlDisplay = document.getElementById('streamUrlDisplay');
         if (!urlDisplay) return;
         
-        // Build full URL using server IP and camera's dedicated MJPEG port
+        // Build full URL using server IP and dedicated MJPEG port
         const mjpegPort = urlDisplay.dataset.mjpegPort || '8081';
         const serverIp = urlDisplay.dataset.serverIp || window.location.hostname;
         const fullUrl = `http://${serverIp}:${mjpegPort}/stream/`;
