@@ -1,4 +1,4 @@
-# File Version: 0.19.3
+# File Version: 0.19.4
 from __future__ import annotations
 
 import argparse
@@ -295,12 +295,22 @@ async def _start_rtsp_streams_on_boot(config_store: ConfigStore) -> None:
     """Start RTSP streams for cameras that have rtsp_enabled=True on server boot."""
     from . import rtsp_server
     from . import mjpeg_server
+    from . import system_info
     from .config_store import resolve_video_device, resolve_audio_device
+    import platform
     
     rtsp = rtsp_server.get_rtsp_server()
     if not rtsp.is_ffmpeg_available():
         logging.warning("FFmpeg not available, skipping RTSP auto-start")
         return
+    
+    # On Linux, check if Motion is running - if so, warn but don't block
+    is_linux = platform.system().lower() == "linux"
+    motion_running = False
+    if is_linux:
+        motion_running = system_info.is_motion_running()
+        if motion_running:
+            logging.warning("Motion daemon is running - RTSP streams may fail if Motion is using the cameras")
     
     mjpeg = mjpeg_server.get_mjpeg_server()
     
@@ -309,6 +319,12 @@ async def _start_rtsp_streams_on_boot(config_store: ConfigStore) -> None:
         cam = config_store.get_camera(cam_info["id"])
         if cam and cam.rtsp_enabled:
             logging.info("Auto-starting RTSP stream for camera %s (%s)", cam.identifier, cam.name)
+            
+            # Warn about Motion conflict
+            if motion_running:
+                motion_port = cam.motion_stream_port or 8081
+                logging.warning("Camera %s: Motion may be using this device (port %d)", cam.identifier, motion_port)
+            
             try:
                 # Stop MJPEG stream first to release the camera (Windows can only have one process access camera)
                 if mjpeg:

@@ -1,4 +1,4 @@
-# File Version: 0.28.9
+# File Version: 0.29.0
 from __future__ import annotations
 
 import aiohttp
@@ -344,6 +344,19 @@ class ConfigCameraHandler(BaseHandler):
                 logger.debug("RTSP: FFmpeg available: %s", rtsp.is_ffmpeg_available())
                 
                 if camera and rtsp.is_ffmpeg_available():
+                    # On Linux, check if Motion is running and using the camera
+                    # Motion holds exclusive access to cameras, so RTSP/FFmpeg will fail
+                    if platform.system().lower() == "linux":
+                        motion_port = camera.motion_stream_port or 8081
+                        if system_info.is_motion_running(motion_port):
+                            logger.warning("RTSP: Motion daemon detected on port %d - camera may be busy", motion_port)
+                            result["motion_warning"] = True
+                            result["motion_message"] = (
+                                "Motion daemon is running and may be using this camera. "
+                                "RTSP stream may fail. Consider stopping Motion first: "
+                                "sudo systemctl stop motion"
+                            )
+                    
                     # Stop MJPEG stream first to release camera (Windows can only have one process access camera)
                     mjpeg = mjpeg_server.get_mjpeg_server()
                     if mjpeg:

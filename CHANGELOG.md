@@ -1,5 +1,49 @@
-<!-- File Version: 0.38.5 -->
+<!-- File Version: 0.38.6 -->
 # Changelog
+
+## 0.38.6 - 2025-12-29
+### Critical Cross-Platform Fixes (Rapport d'incohérences)
+Based on static analysis report identifying cross-platform inconsistencies.
+
+#### Point 1 & 2: MJPEG/OpenCV Backend Selection
+- **CRITICAL FIX**: On Linux, OpenCV now uses `CAP_V4L2` backend instead of `CAP_DSHOW` (Windows-only).
+- **CRITICAL FIX**: Numeric device indices ("0", "1") are now converted to `/dev/videoN` paths on Linux.
+- **IMPACT**: MJPEG streaming now works correctly on Raspberry Pi with numeric device indices.
+
+#### Point 3: MediaMTX Service Startup
+- **FIX**: No longer blindly calls `sudo systemctl start mediamtx` which fails without TTY.
+- **NEW**: Checks if running as root (`os.geteuid() == 0`) before attempting service control.
+- **NEW**: Uses `sudo -n` (non-interactive) to test passwordless sudo availability.
+- **IMPACT**: RTSP startup no longer fails when running as non-root service user.
+
+#### Point 4: Motion Conflict Detection for RTSP
+- **NEW**: Before starting RTSP, checks if Motion daemon is running on Linux.
+- **NEW**: Warning returned in API response when Motion may be using the camera.
+- **NEW**: Boot auto-start logs warnings about potential Motion conflicts.
+- **IMPACT**: Users are informed when RTSP may fail due to Motion holding camera.
+
+#### Point 5: OpenCV Virtual Environment Fix
+- **FIX**: Install script now creates venv with `--system-site-packages`.
+- **FIX**: Allows access to system-installed `python3-opencv` when pip wheel unavailable for ARM.
+- **NEW**: Graceful fallback when pip packages fail to install.
+- **NEW**: Verification step confirms OpenCV availability after installation.
+- **IMPACT**: MJPEG streaming works on Raspberry Pi even without pip opencv-python wheel.
+
+#### Point 6: Improved Motion Detection
+- **IMPROVED**: Motion detection now cached for 5 seconds to reduce subprocess calls.
+- **NEW**: `is_motion_process_running()` function checks process existence regardless of port.
+- **IMPROVED**: Motion detection first checks process with `pgrep`, then port.
+- **IMPACT**: Reduced overhead from repeated Motion detection calls.
+
+### File Version Updates
+- mjpeg_server.py: v0.9.4 → v0.9.5
+- config_store.py: v0.30.2 → v0.30.3
+- rtsp_server.py: v0.5.1 → v0.5.2
+- handlers.py: v0.28.9 → v0.29.0
+- server.py: v0.19.3 → v0.19.4
+- system_info.py: v0.2.2 → v0.2.3
+- install_motion_frontend.sh: updated
+- CHANGELOG.md: v0.38.5 → v0.38.6
 
 ## 0.38.5 - 2025-12-29
 ### Motion Frame Fetching & Logging Improvements

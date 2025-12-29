@@ -4,12 +4,13 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.4
+Version: 0.9.5
 """
 
 import asyncio
 import base64
 import logging
+import platform
 import socket
 import threading
 import time
@@ -811,18 +812,32 @@ class MJPEGServer:
         camera.error = None
         frame_interval = 1.0 / camera.fps
         
-        # Parse device path
+        # Parse device path and determine backend based on platform
+        is_linux = platform.system().lower() == "linux"
+        is_windows = platform.system().lower() == "windows"
+        
         try:
             device_index = int(camera.device_path)
+            # On Linux, convert numeric index to /dev/videoN
+            if is_linux:
+                camera.device_path = f"/dev/video{device_index}"
+                device_index = camera.device_path
+                logger.debug("Converted numeric device %d to %s", int(camera.device_path.split('video')[1]), camera.device_path)
         except ValueError:
             device_index = camera.device_path
         
-        # Open capture device
+        # Open capture device with platform-appropriate backend
         try:
-            if isinstance(device_index, int):
-                # Windows: use DirectShow backend
+            if is_windows and isinstance(device_index, int):
+                # Windows: use DirectShow backend for numeric indices
                 cap = cv2.VideoCapture(device_index, cv2.CAP_DSHOW)
+                logger.debug("Using DirectShow backend for device %s", device_index)
+            elif is_linux:
+                # Linux: use V4L2 backend
+                cap = cv2.VideoCapture(device_index, cv2.CAP_V4L2)
+                logger.debug("Using V4L2 backend for device %s", device_index)
             else:
+                # Default: let OpenCV choose
                 cap = cv2.VideoCapture(device_index)
             
             if not cap.isOpened():
@@ -1105,21 +1120,33 @@ class MJPEGServer:
             result["error"] = "OpenCV not available"
             return result
         
+        # Determine platform for backend selection
+        is_linux = platform.system().lower() == "linux"
+        is_windows = platform.system().lower() == "windows"
+        
         try:
             # Parse device path
             try:
                 device_index = int(device_path)
+                # On Linux, convert numeric index to /dev/videoN
+                if is_linux:
+                    device_path = f"/dev/video{device_index}"
+                    device_index = device_path
             except ValueError:
                 device_index = device_path
             
-            # Open capture device
-            if isinstance(device_index, int):
+            # Open capture device with platform-appropriate backend
+            if is_windows and isinstance(device_index, int):
                 # Windows: use DirectShow backend
                 cap = cv2.VideoCapture(device_index, cv2.CAP_DSHOW)
                 result["backend"] = "DirectShow"
+            elif is_linux:
+                # Linux: use V4L2 backend
+                cap = cv2.VideoCapture(device_index, cv2.CAP_V4L2)
+                result["backend"] = "V4L2"
             else:
                 cap = cv2.VideoCapture(device_index)
-                result["backend"] = "V4L2" if "video" in str(device_index) else "default"
+                result["backend"] = "default"
             
             if not cap.isOpened():
                 result["error"] = f"Cannot open camera device: {device_path}"

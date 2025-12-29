@@ -744,9 +744,11 @@ download_source() {
 setup_python_environment() {
     log_step "Configuration de l'environnement Python"
     
-    # Create virtual environment
-    log_info "Création de l'environnement virtuel..."
-    python3 -m venv "$VENV_DIR"
+    # Create virtual environment with --system-site-packages
+    # This allows access to system-installed packages like python3-opencv
+    # which may not have a pip wheel for ARM architecture
+    log_info "Création de l'environnement virtuel (avec accès aux packages système)..."
+    python3 -m venv --system-site-packages "$VENV_DIR"
     
     # Upgrade pip
     log_info "Mise à jour de pip..."
@@ -755,9 +757,31 @@ setup_python_environment() {
     # Install requirements
     if [[ -f "$INSTALL_DIR/requirements.txt" ]]; then
         log_info "Installation des dépendances Python..."
-        "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
+        # Use --ignore-installed for packages that may be system-installed
+        "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt" || {
+            log_warning "Certains packages pip n'ont pas pu être installés"
+            log_info "Tentative d'installation des packages manquants un par un..."
+            while IFS= read -r pkg || [[ -n "$pkg" ]]; do
+                # Skip comments and empty lines
+                [[ "$pkg" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${pkg// }" ]] && continue
+                # Extract package name (without version specifier)
+                pkg_name=$(echo "$pkg" | sed 's/[<>=!].*//' | tr -d '[:space:]')
+                [[ -z "$pkg_name" ]] && continue
+                "$VENV_DIR/bin/pip" install "$pkg" 2>/dev/null || \
+                    log_warning "Package $pkg_name non installable via pip (peut être disponible via système)"
+            done < "$INSTALL_DIR/requirements.txt"
+        }
     else
         log_warning "Fichier requirements.txt non trouvé"
+    fi
+    
+    # Verify OpenCV is available (either from pip or system)
+    if "$VENV_DIR/bin/python" -c "import cv2; print(f'OpenCV {cv2.__version__} disponible')" 2>/dev/null; then
+        log_success "OpenCV disponible dans l'environnement"
+    else
+        log_warning "OpenCV non disponible - MJPEG streaming sera désactivé"
+        log_info "Pour installer OpenCV: sudo apt install python3-opencv"
     fi
     
     log_success "Environnement Python configuré"

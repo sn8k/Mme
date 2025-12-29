@@ -1,4 +1,4 @@
-# File Version: 0.30.2
+# File Version: 0.30.3
 from __future__ import annotations
 
 import json
@@ -60,16 +60,28 @@ def resolve_video_device(device_path: str, stable_path: str = "") -> str:
     On Linux, /dev/videoX numbers change between reboots. This function:
     1. If stable_path is set, resolve it to current /dev/videoX
     2. If stable_path doesn't exist, try to find it from device_path
-    3. Fall back to device_path if nothing else works
+    3. Convert numeric index to /dev/videoN on Linux
+    4. Fall back to device_path if nothing else works
     
     Args:
-        device_path: The configured device path (e.g., /dev/video0)
+        device_path: The configured device path (e.g., /dev/video0 or "0")
         stable_path: The stable path from /dev/v4l/by-id/ or /dev/v4l/by-path/
         
     Returns:
         The actual device path to use for capture.
     """
-    if platform.system().lower() != "linux":
+    is_linux = platform.system().lower() == "linux"
+    
+    # On Linux, convert numeric index to /dev/videoN
+    if is_linux:
+        try:
+            device_index = int(device_path)
+            device_path = f"/dev/video{device_index}"
+            logger.debug("Converted numeric device index %d to %s", device_index, device_path)
+        except ValueError:
+            pass  # Not a numeric index, keep as-is
+    
+    if not is_linux:
         return device_path
     
     # If we have a stable path, resolve it to the current /dev/videoX

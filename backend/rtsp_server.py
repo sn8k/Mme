@@ -1,4 +1,4 @@
-# File Version: 0.5.1
+# File Version: 0.5.2
 """
 RTSP Server module for Motion Frontend.
 
@@ -17,6 +17,7 @@ Requires:
 
 import asyncio
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -557,7 +558,7 @@ class RTSPServer:
             if not self._is_rtsp_port_listening(config.rtsp_port):
                 logger.info("MediaMTX not listening on port %d, attempting to start service...", config.rtsp_port)
                 try:
-                    # Check if service exists
+                    # Check if service exists and its state
                     result = subprocess.run(
                         ["systemctl", "is-active", "mediamtx"],
                         capture_output=True,
@@ -567,31 +568,56 @@ class RTSPServer:
                     logger.debug("MediaMTX service status: %s (code %d)", result.stdout.strip(), result.returncode)
                     
                     if result.returncode != 0:
-                        # Try to start it with sudo
-                        logger.warning("MediaMTX service not running, attempting to start with sudo...")
-                        start_result = subprocess.run(
-                            ["sudo", "systemctl", "start", "mediamtx"],
-                            capture_output=True,
-                            text=True,
-                            timeout=15
-                        )
-                        if start_result.returncode != 0:
-                            logger.error("Failed to start MediaMTX service: %s", start_result.stderr)
-                            status.is_running = False
-                            status.error = f"Failed to start MediaMTX service: {start_result.stderr}"
-                            self._stream_status[camera_id] = status
-                            return status
+                        # Service not running - check if we can start it
+                        # First, check if we're running as root or have passwordless sudo
+                        can_use_sudo = False
+                        
+                        # Check if running as root
+                        if os.geteuid() == 0:
+                            can_use_sudo = True
+                            logger.debug("Running as root, can start service directly")
                         else:
-                            logger.info("MediaMTX service started successfully")
-                            # Wait for the service to be ready
-                            import time
-                            for i in range(5):
-                                time.sleep(1)
-                                if self._is_rtsp_port_listening(config.rtsp_port):
-                                    logger.info("MediaMTX now listening on port %d", config.rtsp_port)
-                                    break
+                            # Check if we have passwordless sudo for systemctl
+                            try:
+                                check = subprocess.run(
+                                    ["sudo", "-n", "systemctl", "is-enabled", "mediamtx"],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5
+                                )
+                                can_use_sudo = (check.returncode == 0 or "enabled" in check.stdout or "disabled" in check.stdout)
+                                logger.debug("Passwordless sudo check: returncode=%d, can_use=%s", check.returncode, can_use_sudo)
+                            except Exception as e:
+                                logger.debug("Passwordless sudo not available: %s", e)
+                        
+                        if can_use_sudo:
+                            logger.info("Attempting to start MediaMTX service...")
+                            start_cmd = ["systemctl", "start", "mediamtx"] if os.geteuid() == 0 else ["sudo", "-n", "systemctl", "start", "mediamtx"]
+                            start_result = subprocess.run(
+                                start_cmd,
+                                capture_output=True,
+                                text=True,
+                                timeout=15
+                            )
+                            if start_result.returncode != 0:
+                                logger.warning("Could not start MediaMTX service: %s", start_result.stderr)
+                                # Don't fail - the service might start automatically or be managed externally
                             else:
-                                logger.warning("MediaMTX service started but port %d not yet listening", config.rtsp_port)
+                                logger.info("MediaMTX service started successfully")
+                                # Wait for the service to be ready
+                                import time
+                                for i in range(5):
+                                    time.sleep(1)
+                                    if self._is_rtsp_port_listening(config.rtsp_port):
+                                        logger.info("MediaMTX now listening on port %d", config.rtsp_port)
+                                        break
+                                else:
+                                    logger.warning("MediaMTX service started but port %d not yet listening", config.rtsp_port)
+                        else:
+                            logger.warning(
+                                "MediaMTX service not running and cannot start it (no sudo access). "
+                                "Please start manually: sudo systemctl start mediamtx"
+                            )
                     else:
                         logger.info("MediaMTX service is active")
                 except Exception as e:

@@ -1,4 +1,4 @@
-# File Version: 0.2.2
+# File Version: 0.2.3
 """
 System information detection module for Motion Frontend.
 
@@ -12,6 +12,7 @@ import re
 import shutil
 import socket
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
@@ -215,12 +216,18 @@ def refresh_system_versions() -> SystemVersions:
     return get_system_versions(refresh=True)
 
 
+# Cache for Motion running state (to avoid repeated subprocess calls)
+_motion_cache: dict = {"result": None, "timestamp": 0, "port": None}
+_MOTION_CACHE_TTL = 5  # seconds
+
+
 def is_motion_running(port: int = 8081) -> bool:
     """
     Check if Motion daemon is running and listening on the specified port.
     
     On Linux, Motion is the preferred MJPEG source if available.
     This function checks if Motion is actively serving streams.
+    Results are cached for 5 seconds to avoid repeated subprocess calls.
     
     Args:
         port: The port to check (default 8081, Motion's default stream port).
@@ -231,44 +238,74 @@ def is_motion_running(port: int = 8081) -> bool:
     if platform.system().lower() != "linux":
         return False
     
-    # Check if the port is listening
+    # Check cache (only if same port)
+    now = time.time()
+    if (_motion_cache["result"] is not None and 
+        _motion_cache["port"] == port and
+        now - _motion_cache["timestamp"] < _MOTION_CACHE_TTL):
+        return _motion_cache["result"]
+    
+    result = _check_motion_running(port)
+    _motion_cache["result"] = result
+    _motion_cache["port"] = port
+    _motion_cache["timestamp"] = now
+    return result
+
+
+def _check_motion_running(port: int) -> bool:
+    """Internal function to check if Motion is running on a specific port."""
+    # First, check if motion process exists at all (fast check)
+    try:
+        pgrep_result = subprocess.run(
+            ["pgrep", "-x", "motion"],
+            capture_output=True,
+            timeout=2
+        )
+        if pgrep_result.returncode != 0:
+            logger.debug("Motion process not found (pgrep)")
+            return False
+    except Exception as e:
+        logger.debug("pgrep check failed: %s", e)
+        # Continue with port check anyway
+    
+    # Motion process exists, check if port is open
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.5)
-            result = s.connect_ex(('127.0.0.1', port))
-            if result == 0:
-                # Port is open - check if it's Motion
-                # Try to read from the process using /proc
-                try:
-                    output = subprocess.run(
-                        ["ss", "-tlnp"],
-                        capture_output=True,
-                        text=True,
-                        timeout=2
-                    )
-                    if output.returncode == 0 and f":{port}" in output.stdout:
-                        if "motion" in output.stdout.lower():
-                            logger.debug("Motion detected running on port %d", port)
-                            return True
-                except Exception:
-                    pass
-                
-                # Alternative: check if motion process exists
-                try:
-                    result = subprocess.run(
-                        ["pgrep", "-x", "motion"],
-                        capture_output=True,
-                        timeout=2
-                    )
-                    if result.returncode == 0:
-                        logger.debug("Motion process detected (pgrep)")
-                        return True
-                except Exception:
-                    pass
+            conn_result = s.connect_ex(('127.0.0.1', port))
+            if conn_result == 0:
+                logger.debug("Motion detected running on port %d", port)
+                return True
+            else:
+                logger.debug("Port %d not listening (Motion may use different port)", port)
+                # Motion process exists but not on this port
+                # Return True anyway since Motion is running (may have camera)
+                return True
     except Exception as e:
-        logger.debug("Error checking Motion status: %s", e)
+        logger.debug("Error checking port %d: %s", port, e)
     
     return False
+
+
+def is_motion_process_running() -> bool:
+    """
+    Check if any Motion process is running (regardless of port).
+    
+    Returns:
+        True if the Motion daemon process is running.
+    """
+    if platform.system().lower() != "linux":
+        return False
+    
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "motion"],
+            capture_output=True,
+            timeout=2
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def get_motion_stream_url(port: int = 8081, camera_id: str = "1") -> Optional[str]:
