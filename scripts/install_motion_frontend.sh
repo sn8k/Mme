@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.5.1
+# File Version: 1.5.2
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -72,7 +72,7 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Script version (extracted from header)
-SCRIPT_VERSION="1.5.1"
+SCRIPT_VERSION="1.5.2"
 
 # ============================================================================
 # Helper functions
@@ -1247,7 +1247,7 @@ repair() {
     if [[ ! -d "$INSTALL_DIR" ]]; then
         log_error "✗ Répertoire d'installation absent: $INSTALL_DIR"
         needs_reinstall=true
-        ((issues_found++))
+        ((issues_found++)) || true
     else
         log_success "✓ Répertoire d'installation présent"
         
@@ -1256,12 +1256,12 @@ repair() {
         for dir in "${required_dirs[@]}"; do
             if [[ ! -d "$INSTALL_DIR/$dir" ]]; then
                 log_warning "✗ Sous-répertoire manquant: $dir"
-                ((issues_found++))
+                ((issues_found++)) || true
                 
                 if [[ "$dir" == "logs" ]] || [[ "$dir" == "config" ]]; then
                     log_info "  → Création de $INSTALL_DIR/$dir"
                     mkdir -p "$INSTALL_DIR/$dir"
-                    ((issues_fixed++))
+                    ((issues_fixed++)) || true
                 else
                     needs_reinstall=true
                 fi
@@ -1278,11 +1278,11 @@ repair() {
     
     if ! id "$SERVICE_USER" > /dev/null 2>&1; then
         log_warning "✗ Utilisateur '$SERVICE_USER' absent"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         log_info "  → Création de l'utilisateur et des groupes..."
         create_user_and_groups
-        ((issues_fixed++))
+        ((issues_fixed++)) || true
     else
         log_success "✓ Utilisateur '$SERVICE_USER' présent"
         
@@ -1292,11 +1292,11 @@ repair() {
             if getent group "$grp" > /dev/null 2>&1; then
                 if ! groups "$SERVICE_USER" 2>/dev/null | grep -qw "$grp"; then
                     log_warning "✗ Utilisateur non membre du groupe '$grp'"
-                    ((issues_found++))
+                    ((issues_found++)) || true
                     
                     log_info "  → Ajout au groupe '$grp'..."
                     usermod -aG "$grp" "$SERVICE_USER"
-                    ((issues_fixed++))
+                    ((issues_fixed++)) || true
                 fi
             fi
         done
@@ -1309,23 +1309,23 @@ repair() {
     
     if [[ ! -d "$VENV_DIR" ]]; then
         log_warning "✗ Environnement virtuel absent"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         if [[ -d "$INSTALL_DIR/backend" ]]; then
             log_info "  → Recréation de l'environnement virtuel..."
             setup_python_environment
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             needs_reinstall=true
         fi
     elif [[ ! -f "$VENV_DIR/bin/python" ]]; then
         log_warning "✗ Python non trouvé dans l'environnement virtuel"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         log_info "  → Recréation de l'environnement virtuel..."
         rm -rf "$VENV_DIR"
         setup_python_environment
-        ((issues_fixed++))
+        ((issues_fixed++)) || true
     else
         log_success "✓ Environnement Python présent"
         
@@ -1334,11 +1334,11 @@ repair() {
             log_info "  Vérification des dépendances Python..."
             if ! "$VENV_DIR/bin/pip" check > /dev/null 2>&1; then
                 log_warning "✗ Dépendances Python incomplètes"
-                ((issues_found++))
+                ((issues_found++)) || true
                 
                 log_info "  → Réinstallation des dépendances..."
                 "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt" > /dev/null 2>&1
-                ((issues_fixed++))
+                ((issues_fixed++)) || true
             else
                 log_success "✓ Dépendances Python OK"
             fi
@@ -1354,12 +1354,12 @@ repair() {
     
     if [[ ! -f "$service_file" ]]; then
         log_warning "✗ Fichier service systemd absent"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         if [[ -d "$INSTALL_DIR/backend" ]]; then
             log_info "  → Recréation du service systemd..."
             create_systemd_service
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             needs_reinstall=true
         fi
@@ -1370,7 +1370,7 @@ repair() {
         if ! grep -q "KillMode=mixed" "$service_file" 2>/dev/null || \
            ! grep -q "TimeoutStopSec=" "$service_file" 2>/dev/null; then
             log_warning "✗ Service systemd obsolète (options de shutdown manquantes)"
-            ((issues_found++))
+            ((issues_found++)) || true
             
             log_info "  → Mise à jour du service systemd..."
             # Stop service before updating
@@ -1380,17 +1380,17 @@ repair() {
             pkill -9 -f "python.*backend.server" 2>/dev/null || true
             sleep 1
             create_systemd_service
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         fi
         
         # Check if service is enabled
         if ! systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
             log_warning "✗ Service non activé au démarrage"
-            ((issues_found++))
+            ((issues_found++)) || true
             
             log_info "  → Activation du service..."
             systemctl enable "$SERVICE_NAME"
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             log_success "✓ Service activé au démarrage"
         fi
@@ -1407,11 +1407,11 @@ repair() {
         
         if [[ "$owner" != "$SERVICE_USER" ]]; then
             log_warning "✗ Propriétaire incorrect: $owner (attendu: $SERVICE_USER)"
-            ((issues_found++))
+            ((issues_found++)) || true
             
             log_info "  → Correction des permissions..."
             set_permissions
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             log_success "✓ Permissions correctes"
         fi
@@ -1424,12 +1424,12 @@ repair() {
     
     if ! command -v mediamtx &> /dev/null; then
         log_warning "✗ MediaMTX non installé (streaming RTSP non disponible)"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         log_info "  → Installation de MediaMTX..."
         if install_mediamtx; then
             if command -v mediamtx &> /dev/null; then
-                ((issues_fixed++))
+                ((issues_fixed++)) || true
             fi
         else
             log_warning "  → Échec de l'installation de MediaMTX (RTSP non disponible)"
@@ -1440,11 +1440,11 @@ repair() {
         # Check if service is running
         if ! systemctl is-active --quiet mediamtx 2>/dev/null; then
             log_warning "✗ Service MediaMTX non actif"
-            ((issues_found++))
+            ((issues_found++)) || true
             
             log_info "  → Démarrage du service MediaMTX..."
             systemctl start mediamtx 2>/dev/null || true
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             log_success "✓ Service MediaMTX actif"
         fi
@@ -1459,12 +1459,12 @@ repair() {
     
     if [[ ! -f "$config_file" ]]; then
         log_warning "✗ Fichier de configuration absent"
-        ((issues_found++))
+        ((issues_found++)) || true
         
         log_info "  → Création de la configuration par défaut..."
         setup_configuration
         set_permissions
-        ((issues_fixed++))
+        ((issues_fixed++)) || true
     else
         log_success "✓ Fichier de configuration présent"
         
@@ -1480,12 +1480,12 @@ repair() {
     if [[ -d "$INSTALL_DIR/logs" ]]; then
         if [[ ! -w "$INSTALL_DIR/logs" ]] || [[ $(stat -c '%U' "$INSTALL_DIR/logs") != "$SERVICE_USER" ]]; then
             log_warning "✗ Permissions du répertoire logs incorrectes"
-            ((issues_found++))
+            ((issues_found++)) || true
             
             log_info "  → Correction des permissions logs..."
             chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/logs"
             chmod -R 755 "$INSTALL_DIR/logs"
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
         else
             log_success "✓ Répertoire de logs OK"
         fi
