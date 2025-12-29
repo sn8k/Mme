@@ -1,0 +1,32 @@
+/* File Version: 0.1.0 */
+.frame-mode .app-header,
+.frame-mode .status-bar,
+.frame-mode .config-columns,
+.frame-mode #configColumns,
+.frame-mode #cameraConfigColumns {
+    display: none;
+}
+
+.frame-mode .camera-preview {
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    padding: 0;
+    border-radius: 0;
+    border: none;
+}
+
+.frame-mode .frame-container {
+    min-height: 100vh;
+    border-radius: 0;
+}
+
+.frame-mode #cameraFrame {
+    width: 100%;
+    height: 100vh;
+    object-fit: cover;
+}
+
+.frame-mode .overlay {
+    justify-content: space-between;
+}

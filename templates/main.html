@@ -1,0 +1,392 @@
+{# File Version: 0.13.0 #}
+{% extends "base.html" %}
+
+{% macro config_item(config) -%}
+    {%- if not config %}
+        {# nothing to render #}
+    {%- else %}
+        {%- set row_classes = ['settings-item'] %}
+        {%- if config.class %}
+            {%- do row_classes.append(config.class) %}
+        {%- endif %}
+        {%- set data_attrs = [] %}
+        {%- if config.depends %}
+            {%- do data_attrs.append('data-depends="%s"' % config.depends) %}
+        {%- endif %}
+        {%- if config.validate %}
+            {%- do data_attrs.append('data-validate="%s"' % config.validate) %}
+        {%- endif %}
+        {%- if config.reboot %}
+            {%- do data_attrs.append('data-reboot="%s"' % config.reboot|lower) %}
+        {%- endif %}
+        {%- if config.unit %}
+            {%- do data_attrs.append('data-unit="%s"' % config.unit) %}
+        {%- endif %}
+        {%- if config.help %}
+            {%- do data_attrs.append('data-help="%s"' % _(config.help)) %}
+        {%- endif %}
+        {%- if config.type == 'separator' %}
+        <tr class="{{ ' '.join(row_classes) }} settings-separator" {{ ' '.join(data_attrs) | safe }}>
+            <td colspan="2"><h4 class="settings-section-subtitle">{{ _(config.label) if config.label else '' }}</h4></td>
+        </tr>
+        {%- else %}
+        <tr class="{{ ' '.join(row_classes) }}" data-config-id="{{ config.id }}" data-type="{{ config.type }}" {{ ' '.join(data_attrs) | safe }}>
+            <td class="settings-label">
+                <label for="{{ config.id }}Entry">{{ _(config.label) if config.label else config.id }}</label>
+                {%- if config.help %}
+                <span class="help-mark" aria-label="{{ _(config.help) }}" tabindex="0">?</span>
+                {%- endif %}
+            </td>
+            <td class="settings-control">
+                {%- if config.type in ['str', 'pwd', 'number'] %}
+                <input
+                    id="{{ config.id }}Entry"
+                    name="{{ config.id }}"
+                    class="styled"
+                    type="{{ 'password' if config.type == 'pwd' else 'number' if config.type == 'number' else 'text' }}"
+                    value="{{ config.value|default('') }}"
+                    {% if config.placeholder %}placeholder="{{ _(config.placeholder) }}"{% endif %}
+                    {% if config.min is not none %}min="{{ config.min }}"{% endif %}
+                    {% if config.max is not none %}max="{{ config.max }}"{% endif %}
+                    {% if config.step is not none %}step="{{ config.step }}"{% endif %}
+                    {% if config.pattern %}pattern="{{ config.pattern }}"{% endif %}
+                    {% if config.readonly %}readonly{% endif %}
+                    autocomplete="off"
+                >
+                {%- elif config.type == 'range' %}
+                <div class="range-field">
+                    <input
+                        id="{{ config.id }}Slider"
+                        type="range"
+                        name="{{ config.id }}"
+                        class="styled"
+                        value="{{ config.value|default(config.min|default(0)) }}"
+                        {% if config.min is not none %}min="{{ config.min }}"{% endif %}
+                        {% if config.max is not none %}max="{{ config.max }}"{% endif %}
+                        {% if config.step is not none %}step="{{ config.step }}"{% endif %}
+                    >
+                    <span class="range-value" data-target="{{ config.id }}Slider">{{ config.value|default('0') }}</span>
+                </div>
+                {%- elif config.type == 'bool' %}
+                <label class="switch">
+                    <input type="checkbox" id="{{ config.id }}Switch" name="{{ config.id }}" {% if config.value %}checked{% endif %}>
+                    <span class="slider"></span>
+                </label>
+                {%- elif config.type == 'choices' %}
+                <select id="{{ config.id }}Select" name="{{ config.id }}" class="styled">
+                    {%- for choice in config.choices|default([]) %}
+                    <option value="{{ choice.value }}" {% if choice.value == config.value %}selected{% endif %}>{{ _(choice.label) if choice.label else choice.value }}</option>
+                    {%- endfor %}
+                </select>
+                {%- elif config.type == 'html' %}
+                <div id="{{ config.id }}Html" class="embedded-html">{{ config.html|safe }}</div>
+                {%- else %}
+                <span class="placeholder">{{ _('Unsupported control') }}</span>
+                {%- endif %}
+                {%- if config.unit %}
+                <span class="unit">{{ config.unit }}</span>
+                {%- endif %}
+            </td>
+        </tr>
+        {%- endif %}
+    {%- endif %}
+{%- endmacro %}
+
+{% set motion_context = {
+    'staticPath': static_path,
+    'version': version,
+    'hostname': hostname|default(''),
+    'adminUsername': admin_username|default(''),
+    'frame': frame,
+    'hasLocalCamSupport': has_local_cam_support,
+    'hasNetCamSupport': has_net_cam_support,
+    'maskWidth': mask_width|default(16),
+    'lingvo': lingvo|default('en'),
+    'cameras': cameras|default([]),
+    'cameraId': camera_id|default(cameras[0].id if cameras else ''),
+    'audioDevices': audio_devices|default([]),
+    'audioId': audio_id|default('')
+} %}
+
+{% block title %}{{ _('Motion Frontend Control Center') }}{% endblock %}
+
+{% block body_attrs %}data-motion-context='{{ motion_context | tojson | e }}' data-lingvo='{{ lingvo|default('en') }}'{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{{ static_path }}/css/ui.css?v={{ version }}">
+    <link rel="stylesheet" href="{{ static_path }}/css/main.css?v={{ version }}">
+    {% if frame %}
+    <link rel="stylesheet" href="{{ static_path }}/css/frame.css?v={{ version }}">
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+<div id="appShell" class="{% if frame %}frame-mode{% else %}dashboard-mode{% endif %}">
+    <header class="app-header">
+        <div class="header-left">
+            <button
+                id="sidebarToggle"
+                class="button icon-button sidebar-toggle"
+                type="button"
+                aria-controls="menuSidebar"
+                aria-expanded="false"
+                aria-label="{{ _('Afficher le menu') }}"
+                data-label-show="{{ _('Afficher le menu') }}"
+                data-label-hide="{{ _('Masquer le menu') }}"
+                data-sidebar-breakpoint="1024"
+            >
+                <svg class="icon" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <button
+                id="themeToggle"
+                class="button icon-button theme-toggle"
+                type="button"
+                aria-label="{{ _('Changer le thème') }}"
+                data-theme="dark"
+            >
+                <svg class="icon icon-sun" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="icon icon-moon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+            <div class="brand">
+                <img src="{{ static_path }}/img/motion-frontend-logo.svg?v={{ version }}" alt="Motion Frontend" class="brand-logo">
+                <div class="brand-meta">
+                    <h1>Motion Frontend</h1>
+                    <span class="hostname" id="hostnameLabel">{{ hostname|default(_('Unknown host')) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <label for="cameraSelect" class="sr-only">{{ _('Camera selector') }}</label>
+            <select id="cameraSelect" class="styled" {% if not cameras %}disabled{% endif %}>
+                {% for camera in cameras|default([]) %}
+                <option value="{{ camera.id }}" {% if loop.first and not camera_id %}selected{% elif camera.id == camera_id %}selected{% endif %}>{{ camera.name }}</option>
+                {% endfor %}
+            </select>
+            <button id="addCameraButton" class="button minor" title="{{ _('Add camera') }}">+</button>
+            <button id="remCameraButton" class="button minor" title="{{ _('Remove camera') }}" {% if not cameras %}disabled{% endif %}>-</button>
+            
+            {# Audio device selector #}
+            <span class="header-separator"></span>
+            <label for="audioSelect" class="sr-only">{{ _('Audio selector') }}</label>
+            <select id="audioSelect" class="styled audio-select" {% if not audio_devices %}disabled{% endif %}>
+                <option value="">-- {{ _('Audio') }} --</option>
+                {% for audio in audio_devices|default([]) %}
+                <option value="{{ audio.id }}" {% if audio.id == audio_id %}selected{% endif %}>{{ audio.name }}</option>
+                {% endfor %}
+            </select>
+            <button id="addAudioButton" class="button minor" title="{{ _('Add audio device') }}">+</button>
+            <button id="remAudioButton" class="button minor" title="{{ _('Remove audio device') }}" {% if not audio_devices %}disabled{% endif %}>-</button>
+            
+            <span class="header-separator"></span>
+            <button id="applyButton" class="button apply-button">{{ _('Apply') }}</button>
+            <button id="backupButton" class="button backup-button">{{ _('Backup') }}</button>
+            <button id="restoreButton" class="button restore-button">{{ _('Restore') }}</button>
+            <button id="updateButton" class="button update-button">{{ _('Update') }}</button>
+            <button id="passwordChangeButton" class="button icon-button" title="{{ _('Changer le mot de passe') }}" onclick="showPasswordChangeModal()">
+                <svg class="icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+            </button>
+            <a href="/logout" class="button icon-button logout-button" title="{{ _('Déconnexion') }}">
+                <svg class="icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </a>
+        </div>
+    </header>
+
+    <div class="status-bar" id="statusBar">
+        <span id="statusMessage">{{ _('Ready') }}</span>
+    </div>
+
+    <main class="app-content">
+        <aside class="menu-sidebar" id="menuSidebar" aria-label="{{ _('Panneau de configuration') }}" aria-hidden="true">
+            <div class="menu-sidebar__header">
+                <h2>{{ _('Configuration') }}</h2>
+                <div class="menu-sidebar__actions">
+                    <button class="button save-config-btn hidden" type="button" id="saveConfigBtn" title="{{ _('Sauvegarder les modifications') }}">
+                        <svg class="icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        {{ _('Sauvegarder') }}
+                    </button>
+                    <button class="button ghost sidebar-close" type="button" data-sidebar-close>
+                        {{ _('Fermer') }}
+                    </button>
+                </div>
+            </div>
+            <div class="menu-sidebar__content">
+                <section class="config-columns" id="configColumns">
+                    {% set builtin_main_sections = [
+                        {'slug': 'general', 'title': _('General Settings'), 'configs': general|default([])},
+                        {'slug': 'display_settings', 'title': _('Display Settings'), 'configs': display_settings|default([])},
+                        {'slug': 'network_manager', 'title': _('Network Manager'), 'configs': network_manager|default([])},
+                        {'slug': 'meeting', 'title': _('Meeting'), 'configs': meeting|default([])},
+                        {'slug': 'backup', 'title': _('Backup / Restore'), 'configs': backup|default([])}
+                    ] %}
+                    {% for section in builtin_main_sections %}
+                        {% if section.configs %}
+                        <section class="settings-section main-config collapsed" data-section="{{ section.slug }}">
+                            <header class="settings-section-title">
+                                <button class="minimize" aria-expanded="false"></button>
+                                <h2>{{ section.title }}</h2>
+                            </header>
+                            <table class="settings" style="display: none;">
+                                {% for item in section.configs %}
+                                    {{ config_item(item) }}
+                                {% endfor %}
+                            </table>
+                        </section>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% for section in main_sections|default([]) %}
+                    <section class="settings-section additional-section additional-section-main collapsed" data-section="{{ section.slug|default(section.title|lower|replace(' ', '-')) }}">
+                        <header class="settings-section-title">
+                            <button class="minimize" aria-expanded="false"></button>
+                            <h2>{{ _(section.title) }}</h2>
+                        </header>
+                        <table class="settings" style="display: none;">
+                            {% for item in section.configs|default([]) %}
+                                {{ config_item(item) }}
+                            {% endfor %}
+                        </table>
+                    </section>
+                    {% endfor %}
+                </section>
+
+                <section class="config-columns camera-config" id="cameraConfigColumns">
+                    {% if camera_id and camera_config_sections %}
+                        <div class="camera-config-header">
+                            <h3>{{ _('Configuration caméra') }}: {{ cameras|selectattr('id', 'equalto', camera_id)|map(attribute='name')|first|default(camera_id) }}</h3>
+                        </div>
+                        {% for section in camera_config_sections %}
+                            <section class="settings-section camera-config-section collapsed" data-section="{{ section.slug }}">
+                                <header class="settings-section-title">
+                                    <button class="minimize" aria-expanded="false"></button>
+                                    <h2>{{ _(section.title) }}</h2>
+                                </header>
+                                <table class="settings" style="display: none;">
+                                    {% for item in section.configs|default([]) %}
+                                        {{ config_item(item) }}
+                                    {% endfor %}
+                                </table>
+                            </section>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-camera-selected" id="noCameraSelected">
+                            <p>{{ _('Sélectionnez une caméra pour afficher sa configuration.') }}</p>
+                        </div>
+                    {% endif %}
+                </section>
+
+                {# Audio configuration section #}
+                <section class="config-columns audio-config" id="audioConfigColumns">
+                    {% if audio_id and audio_config_sections %}
+                        <div class="audio-config-header">
+                            <h3>{{ _('Configuration audio') }}: {{ audio_devices|selectattr('id', 'equalto', audio_id)|map(attribute='name')|first|default(audio_id) }}</h3>
+                        </div>
+                        {% for section in audio_config_sections %}
+                            <section class="settings-section audio-config-section collapsed" data-section="{{ section.slug }}">
+                                <header class="settings-section-title">
+                                    <button class="minimize" aria-expanded="false"></button>
+                                    <h2>{{ _(section.title) }}</h2>
+                                </header>
+                                <table class="settings" style="display: none;">
+                                    {% for item in section.configs|default([]) %}
+                                        {{ config_item(item) }}
+                                    {% endfor %}
+                                </table>
+                            </section>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-audio-selected" id="noAudioSelected">
+                            <p>{{ _('Sélectionnez un périphérique audio pour afficher sa configuration.') }}</p>
+                        </div>
+                    {% endif %}
+                </section>
+            </div>
+        </aside>
+        <div class="sidebar-scrim" id="sidebarScrim" aria-hidden="true"></div>
+
+        <section class="camera-preview" aria-label="{{ _('Camera preview') }}">
+            <div id="previewGrid" class="preview-grid" data-preview-count="4">
+                {% for i in range(32) %}
+                <div class="preview-cell" data-preview-index="{{ i }}">
+                    <div class="frame-container">
+                        <img class="preview-frame" alt="{{ _('Preview') }} {{ i + 1 }}" src="" data-camera-id="">
+                        <div class="preview-overlay">
+                            <span class="preview-label">Camera {{ i + 1 }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div id="noCameraMessage" class="empty-state {% if cameras %}hidden{% endif %}">
+                <p>{{ _('Select or add a camera to view its stream.') }}</p>
+            </div>
+        </section>
+
+    </main>
+</div>
+<div id="toastRegion" aria-live="assertive" aria-atomic="true"></div>
+<div id="modalHost"></div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ static_path }}/js/ui.js?v={{ version }}" defer></script>
+    <script src="{{ static_path }}/js/main.js?v={{ version }}" defer></script>
+    {% if frame %}
+    <script src="{{ static_path }}/js/frame.js?v={{ version }}" defer></script>
+    {% endif %}
+    <script>
+        (function () {
+            const contextAttr = document.body.dataset.motionContext;
+            const context = contextAttr ? JSON.parse(contextAttr) : {};
+            window.motionFrontendContext = context;
+
+            function applyCatalog(catalog) {
+                window.motionFrontendI18n = window.motionFrontendI18n || {};
+                window.motionFrontendI18n[context.lingvo] = catalog;
+                if (window.Gettext) {
+                    window.i18n = new Gettext({
+                        domain: 'messages',
+                        locale_data: {
+                            messages: catalog
+                        },
+                        locale: context.lingvo
+                    });
+                }
+            }
+
+            const catalogUrl = `${context.staticPath}/js/motion_frontend.${context.lingvo}.json?v=${context.version}`;
+            fetch(catalogUrl)
+                .then((response) => response.ok ? response.json() : Promise.reject(response.status))
+                .then(applyCatalog)
+                .catch((error) => {
+                    console.error('Failed to load locale catalog', error);
+                });
+        }());
+    </script>
+{% endblock %}

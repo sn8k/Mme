@@ -1,0 +1,48 @@
+{# File Version: 0.2.0 #}
+{% extends "base.html" %}
+
+{% block title %}{{ _('Motion Frontend Version') }}{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{{ static_path }}/css/ui.css?v={{ version }}">
+    <link rel="stylesheet" href="{{ static_path }}/css/main.css?v={{ version }}">
+{% endblock %}
+
+{% block body %}
+<main class="version-page">
+    <section class="version-card">
+        <header>
+            <img src="{{ static_path }}/img/motion-frontend-logo.svg?v={{ version }}" alt="Motion Frontend" class="brand-logo">
+            <div>
+                <h1>{{ _('Motion Frontend') }}</h1>
+                <p>{{ _('Version dashboard for operators and admins.') }}</p>
+            </div>
+        </header>
+        <dl>
+            <div>
+                <dt>{{ _('Frontend version') }}</dt>
+                <dd id="frontendVersion">{{ frontend_version|default(version) }}</dd>
+            </div>
+            <div>
+                <dt>{{ _('Backend version') }}</dt>
+                <dd id="backendVersion">{{ backend_version|default(_('Unknown')) }}</dd>
+            </div>
+            <div>
+                <dt>{{ _('Git commit') }}</dt>
+                <dd id="gitCommit">{{ git_commit|default('---') }}</dd>
+            </div>
+            <div>
+                <dt>{{ _('Build date') }}</dt>
+                <dd id="buildDate">{{ build_date|default('---') }}</dd>
+            </div>
+        </dl>
+        <div class="actions">
+            <a href="/" class="button">{{ _('Back to dashboard') }}</a>
+        </div>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ static_path }}/js/version.js?v={{ version }}" defer></script>
+{% endblock %}

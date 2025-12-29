@@ -1,0 +1,17 @@
+<!-- File Version: 0.2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Motion Frontend logo">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#52ffe0" stop-opacity="1" />
+      <stop offset="60%" stop-color="#1c84ff" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#05060b" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="160" height="160" rx="40" fill="#04050a" />
+  <circle cx="80" cy="80" r="64" fill="url(#glow)" />
+  <circle cx="80" cy="80" r="44" fill="none" stroke="#f7f9ff" stroke-width="4" opacity="0.7" />
+  <path d="M80 40 L110 80 L80 120 L50 80 Z" fill="none" stroke="#f7f9ff" stroke-width="6" stroke-linejoin="round" opacity="0.6" />
+  <circle cx="80" cy="80" r="18" fill="#f7f9ff" />
+  <circle cx="80" cy="80" r="9" fill="#04050a" />
+  <circle cx="90" cy="72" r="5" fill="#52ffe0" />
+</svg>

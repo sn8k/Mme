@@ -1,0 +1,29 @@
+{# File Version: 0.2.0 #}
+<!DOCTYPE html>
+<html lang="{{ lingvo|default('en') }}" class="no-js">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="theme-color" content="#121212">
+    <meta name="description" content="Motion Frontend control panel">
+    <meta name="motion-frontend-version" content="{{ version }}">
+    <title>{% block title %}Motion Frontend{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ static_path }}/img/motion-frontend-logo.svg?v={{ version }}">
+    <link rel="manifest" href="{{ static_path }}/manifest.json?v={{ version }}">
+    <link rel="preload" as="style" href="{{ static_path }}/css/jquery.timepicker.min.css?v={{ version }}">
+    <link rel="stylesheet" href="{{ static_path }}/css/jquery.timepicker.min.css?v={{ version }}">
+    {% block styles %}{% endblock %}
+    {% block head_scripts %}{% endblock %}
+</head>
+<body data-static-path="{{ static_path }}" data-version="{{ version }}" {% block body_attrs %}{% endblock %}>
+    {% block body %}{% endblock %}
+    <script>document.documentElement.classList.remove('no-js');</script>
+    <script src="{{ static_path }}/vendor/css-browser-selector.min.js?v={{ version }}" defer></script>
+    <script src="{{ static_path }}/vendor/jquery.min.js?v={{ version }}" defer></script>
+    <script src="{{ static_path }}/vendor/jquery.mousewheel.min.js?v={{ version }}" defer></script>
+    <script src="{{ static_path }}/vendor/jquery.timepicker.min.js?v={{ version }}" defer></script>
+    <script src="{{ static_path }}/vendor/gettext.min.js?v={{ version }}" defer></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
