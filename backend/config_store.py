@@ -1,4 +1,4 @@
-# File Version: 0.30.1
+# File Version: 0.30.2
 from __future__ import annotations
 
 import json
@@ -255,8 +255,8 @@ class CameraConfig:
     overlay_right_text: str = "timestamp"  # camera_name, timestamp, custom, capture_info, disabled
     overlay_right_custom: str = ""
     overlay_text_scale: int = 3  # 1-10
-    # Stream source settings (internal = our MJPEG server, motion = Motion's stream)
-    stream_source: str = "internal"  # "internal" or "motion"
+    # Stream source settings (auto = Motion if running else internal, internal = our MJPEG server, motion = Motion's stream)
+    stream_source: str = "auto"  # "auto", "internal" or "motion"
     motion_stream_port: int = 8081  # Port where Motion exposes its stream
     # RTSP streaming settings
     rtsp_enabled: bool = False
@@ -329,7 +329,7 @@ class CameraConfig:
             overlay_right_custom=data.get("overlay_right_custom", ""),
             overlay_text_scale=data.get("overlay_text_scale", 3),
             stream_auth_enabled=data.get("stream_auth_enabled", False),
-            stream_source=data.get("stream_source", "internal"),
+            stream_source=data.get("stream_source", "auto"),
             motion_stream_port=data.get("motion_stream_port", 8081),
             rtsp_enabled=data.get("rtsp_enabled", False),
             rtsp_audio_device=data.get("rtsp_audio_device", ""),
@@ -846,6 +846,7 @@ class ConfigStore:
     def _get_stream_source_choices(self) -> List[Dict[str, str]]:
         """Get stream source choices based on Motion availability."""
         choices = [
+            {"value": "auto", "label": "Auto (Motion si disponible)"},
             {"value": "internal", "label": "Serveur MJPEG intégré"},
         ]
         

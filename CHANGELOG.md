@@ -1,5 +1,37 @@
-<!-- File Version: 0.38.3 -->
+<!-- File Version: 0.38.5 -->
 # Changelog
+
+## 0.38.5 - 2025-12-29
+### Motion Frame Fetching & Logging Improvements
+- **NEW**: `FrameHandler` now fetches frames directly from Motion when stream_source is "auto" or "motion".
+- **NEW**: Tries multiple Motion URL patterns: `/camera_id/current/`, `/current/`, `/camera_id/stream/`, `/`.
+- **FIX**: Live preview now works when Motion is the stream source.
+- **IMPROVED**: tornado.access logs reduced to WARNING level in INFO mode (too verbose).
+- **IMPROVED**: In DEBUG mode, tornado.access shows all requests for troubleshooting.
+- **IMPROVED**: More DEBUG logs in FrameHandler for Motion frame fetching.
+- **NEW**: RTSP/MJPEG exclusivity in UI - enabling one automatically disables the other.
+
+### File Version Updates
+- handlers.py: v0.28.8 → v0.28.9
+- server.py: v0.19.2 → v0.19.3
+- main.js: v0.36.0 → v0.37.0
+- CHANGELOG.md: v0.38.4 → v0.38.5
+
+## 0.38.4 - 2025-12-29
+### stream_source Default Changed to "auto"
+- **BREAKING**: `stream_source` default changed from `"internal"` to `"auto"`.
+- **NEW**: Option `"auto"` added to stream source dropdown: "Auto (Motion si disponible)".
+- **BEHAVIOR**: `"auto"` mode detects Motion daemon on Linux and uses it automatically.
+- **BEHAVIOR**: On Windows or if Motion not running, falls back to internal MJPEG server.
+- **EXPLICIT**: `"internal"` forces internal MJPEG server (ignore Motion).
+- **EXPLICIT**: `"motion"` forces Motion's stream (requires Motion to be running).
+- **API**: GET `/api/mjpeg/` now returns `motion_running` boolean (renamed from `motion_available`).
+- **NOTE**: Existing camera configs still have `"stream_source": "internal"`. Delete and re-add cameras, or manually edit JSON to set `"auto"`.
+
+### File Version Updates
+- config_store.py: v0.30.1 → v0.30.2
+- handlers.py: v0.28.7 → v0.28.8
+- CHANGELOG.md: v0.38.3 → v0.38.4
 
 ## 0.38.3 - 2025-12-29
 ### Auto-Detection of Motion Daemon on Linux

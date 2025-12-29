@@ -1,4 +1,4 @@
-# File Version: 0.19.2
+# File Version: 0.19.3
 from __future__ import annotations
 
 import argparse
@@ -217,6 +217,16 @@ def _configure_logging(level: str, log_to_file: bool = True, reset_on_start: boo
     console_handler.setLevel(log_level)
     console_handler.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(console_handler)
+    
+    # Reduce tornado.access verbosity - only WARNING and above in INFO mode
+    # In DEBUG mode, show all tornado.access logs
+    tornado_access_logger = logging.getLogger("tornado.access")
+    if log_level > logging.DEBUG:
+        # In INFO or higher, tornado.access only shows warnings/errors
+        tornado_access_logger.setLevel(logging.WARNING)
+    else:
+        # In DEBUG mode, show all access logs
+        tornado_access_logger.setLevel(logging.DEBUG)
     
     # File handler (rotating, max 5MB, keep 3 backups)
     if log_to_file:

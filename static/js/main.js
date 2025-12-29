@@ -1,4 +1,4 @@
-/* File Version: 0.36.0 */
+/* File Version: 0.37.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -1135,6 +1135,30 @@
                 }
             }
         });
+        
+        // RTSP/MJPEG exclusivity: when one is enabled, disable the other
+        const rtspSwitch = document.getElementById('rtspEnabledSwitch');
+        const streamSwitch = document.getElementById('streamEnabledSwitch');
+        
+        if (rtspSwitch && streamSwitch) {
+            rtspSwitch.addEventListener('change', () => {
+                if (rtspSwitch.checked) {
+                    // Disable MJPEG streaming when RTSP is enabled
+                    streamSwitch.checked = false;
+                    streamSwitch.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('[Config] RTSP enabled -> MJPEG streaming disabled');
+                }
+            });
+            
+            streamSwitch.addEventListener('change', () => {
+                if (streamSwitch.checked && rtspSwitch.checked) {
+                    // Disable RTSP when MJPEG streaming is enabled
+                    rtspSwitch.checked = false;
+                    rtspSwitch.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('[Config] MJPEG streaming enabled -> RTSP disabled');
+                }
+            });
+        }
         
         // Note: Detection buttons use event delegation (see initCameraDetectionButtons)
     }

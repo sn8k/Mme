@@ -1,6 +1,7 @@
-# File Version: 0.28.7
+# File Version: 0.28.9
 from __future__ import annotations
 
+import aiohttp
 import base64
 import hashlib
 import json
@@ -677,6 +678,29 @@ class FrameHandler(BaseHandler):
             self.write(svg)
             return
         
+        # Check stream source - Motion or internal
+        camera = self.config_store.get_camera(camera_id)
+        motion_running = False
+        if platform.system().lower() == "linux":
+            motion_running = system_info.is_motion_running()
+        
+        stream_source = camera.stream_source if camera else "auto"
+        use_motion = stream_source == "motion" or (stream_source == "auto" and motion_running)
+        
+        if use_motion and camera:
+            # Fetch frame from Motion
+            motion_port = camera.motion_stream_port or 8081
+            frame = await self._fetch_motion_frame(motion_port, camera_id)
+            if frame:
+                logger.debug("Frame from Motion for camera %s (port %d)", camera_id, motion_port)
+                self.set_header("Content-Type", "image/jpeg")
+                self.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.write(frame)
+                return
+            else:
+                logger.debug("Failed to fetch frame from Motion for camera %s, falling back", camera_id)
+        
+        # Use internal MJPEG server
         server = mjpeg_server.get_mjpeg_server()
         frame = server.get_frame(camera_id)
         
@@ -687,6 +711,43 @@ class FrameHandler(BaseHandler):
         else:
             self.set_header("Content-Type", "image/png")
             self.write(_PLACEHOLDER_FRAME)
+    
+    async def _fetch_motion_frame(self, port: int, camera_id: str) -> bytes | None:
+        """Fetch a single JPEG frame from Motion's stream."""
+        # Motion exposes streams at different URLs depending on configuration
+        # Try the standard stream URL first, then the picture URL
+        urls_to_try = [
+            f"http://127.0.0.1:{port}/{camera_id}/current/",  # Motion 4.x single frame
+            f"http://127.0.0.1:{port}/current/",  # Motion single camera
+            f"http://127.0.0.1:{port}/{camera_id}/stream/",  # Motion stream
+            f"http://127.0.0.1:{port}/",  # Direct stream (for older Motion)
+        ]
+        
+        for url in urls_to_try:
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            content_type = resp.headers.get("Content-Type", "")
+                            if "image/jpeg" in content_type:
+                                data = await resp.read()
+                                logger.debug("Got frame from Motion URL: %s (%d bytes)", url, len(data))
+                                return data
+                            elif "multipart" in content_type:
+                                # MJPEG stream - read first frame
+                                data = await resp.content.read(100000)  # Read up to 100KB
+                                # Find JPEG boundaries
+                                start = data.find(b'\xff\xd8')
+                                end = data.find(b'\xff\xd9', start)
+                                if start >= 0 and end > start:
+                                    frame = data[start:end+2]
+                                    logger.debug("Extracted frame from Motion MJPEG: %s (%d bytes)", url, len(frame))
+                                    return frame
+            except Exception as e:
+                logger.debug("Failed to fetch from %s: %s", url, e)
+                continue
+        
+        return None
 
 
 class MJPEGStreamHandler(BaseHandler):
@@ -757,24 +818,28 @@ class MJPEGControlHandler(BaseHandler):
         status = server.get_all_status()
         
         # Check if Motion is running (Linux only)
-        motion_available = False
+        motion_running = False
         if platform.system().lower() == "linux":
-            motion_available = system_info.is_motion_running()
+            motion_running = system_info.is_motion_running()
         
-        # Add Motion stream info for cameras using Motion as source
+        # Add Motion stream info for cameras
         for camera_id, cam_status in status.items():
             camera = self.config_store.get_camera(camera_id)
             if camera:
                 motion_port = camera.motion_stream_port or 8081
-                # Auto-detect Motion if not explicitly set to internal
-                if camera.stream_source == "motion" or (motion_available and camera.stream_source != "internal"):
+                stream_source = camera.stream_source or "auto"
+                
+                # Determine effective source
+                if stream_source == "motion" or (stream_source == "auto" and motion_running):
                     cam_status["stream_source"] = "motion"
                     cam_status["motion_stream_port"] = motion_port
-                    cam_status["motion_auto_detected"] = camera.stream_source != "motion"
+                    cam_status["motion_auto_detected"] = (stream_source == "auto")
+                else:
+                    cam_status["stream_source"] = "internal"
         
         self.write_json({
             "opencv_available": mjpeg_server.is_opencv_available(),
-            "motion_available": motion_available,
+            "motion_running": motion_running,
             "cameras": status
         })
     
@@ -808,22 +873,30 @@ class MJPEGControlHandler(BaseHandler):
                 })
                 return
             
-            # On Linux: Auto-detect if Motion is running and use it as source
-            # This is the preferred mode on Linux as Motion handles camera access
+            # Determine stream source: auto, internal, or motion
+            # - auto: Use Motion if running on Linux, else internal
+            # - internal: Force our MJPEG server
+            # - motion: Force Motion's stream
             use_motion = False
             motion_port = camera.motion_stream_port or 8081
+            stream_source = camera.stream_source or "auto"
             
-            if platform.system().lower() == "linux":
-                # Check if stream_source is explicitly set to "internal" (user override)
-                if camera.stream_source == "internal":
-                    logger.debug("MJPEG: Camera %s explicitly set to internal source", camera_id)
-                    use_motion = False
-                elif camera.stream_source == "motion" or system_info.is_motion_running(motion_port):
-                    # Either explicitly set to motion, or auto-detected
-                    if camera.stream_source != "motion":
-                        logger.info("MJPEG: Auto-detected Motion running on port %d for camera %s", 
-                                   motion_port, camera_id)
+            if stream_source == "internal":
+                # User explicitly wants internal MJPEG server
+                logger.debug("MJPEG: Camera %s using internal source (explicit)", camera_id)
+                use_motion = False
+            elif stream_source == "motion":
+                # User explicitly wants Motion
+                logger.debug("MJPEG: Camera %s using Motion source (explicit)", camera_id)
+                use_motion = True
+            elif stream_source == "auto" and platform.system().lower() == "linux":
+                # Auto-detect: use Motion if running on Linux
+                if system_info.is_motion_running(motion_port):
+                    logger.info("MJPEG: Camera %s auto-detected Motion on port %d", camera_id, motion_port)
                     use_motion = True
+                else:
+                    logger.debug("MJPEG: Camera %s using internal source (Motion not running)", camera_id)
+                    use_motion = False
             
             if use_motion:
                 # For Motion source, we don't start our internal server
