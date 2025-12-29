@@ -1,4 +1,4 @@
-# File Version: 0.30.0
+# File Version: 0.30.1
 from __future__ import annotations
 
 import aiohttp
@@ -794,6 +794,22 @@ class MJPEGStreamHandler(BaseHandler):
             self.write(svg)
             return
         
+        # Check stream source - Motion or internal
+        motion_running = False
+        if platform.system().lower() == "linux":
+            motion_running = system_info.is_motion_running()
+        
+        stream_source = camera_config.stream_source if camera_config else "auto"
+        use_motion = stream_source == "motion" or (stream_source == "auto" and motion_running)
+        
+        if use_motion and camera_config:
+            # Proxy Motion stream to client
+            motion_port = camera_config.motion_stream_port or 8081
+            logger.info("MJPEG stream proxying to Motion for camera %s (port %d)", camera_id, motion_port)
+            await self._proxy_motion_stream(motion_port, camera_id)
+            return
+        
+        # Use internal MJPEG server
         server = mjpeg_server.get_mjpeg_server()
         
         # Check if camera exists and is running
@@ -820,6 +836,60 @@ class MJPEGStreamHandler(BaseHandler):
         except Exception as e:
             # Log but don't raise - client likely disconnected
             pass
+    
+    async def _proxy_motion_stream(self, port: int, camera_id: str) -> None:
+        """Proxy Motion's MJPEG stream to the client."""
+        # Try different Motion stream URLs
+        urls_to_try = [
+            f"http://127.0.0.1:{port}/{camera_id}/stream",  # Motion 4.x per-camera
+            f"http://127.0.0.1:{port}/stream",  # Motion single stream
+            f"http://127.0.0.1:{port}/",  # Direct stream (older Motion)
+        ]
+        
+        for url in urls_to_try:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=None, connect=5)) as resp:
+                        if resp.status != 200:
+                            continue
+                        
+                        content_type = resp.headers.get("Content-Type", "")
+                        if "multipart" not in content_type and "image" not in content_type:
+                            continue
+                        
+                        logger.info("Motion stream proxy connected to %s", url)
+                        
+                        # Set headers for MJPEG stream
+                        self.set_header("Content-Type", content_type)
+                        self.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                        self.set_header("Connection", "close")
+                        self.set_header("Pragma", "no-cache")
+                        
+                        # Stream data from Motion to client
+                        try:
+                            async for chunk in resp.content.iter_any():
+                                try:
+                                    self.write(chunk)
+                                    await self.flush()
+                                except tornado.iostream.StreamClosedError:
+                                    # Client disconnected
+                                    logger.debug("Client disconnected from Motion proxy")
+                                    return
+                        except Exception as e:
+                            logger.debug("Motion stream ended: %s", e)
+                        return
+                        
+            except asyncio.TimeoutError:
+                logger.debug("Timeout connecting to Motion at %s", url)
+                continue
+            except Exception as e:
+                logger.debug("Failed to connect to Motion at %s: %s", url, e)
+                continue
+        
+        # No Motion stream found - return error
+        logger.warning("Could not connect to Motion stream on port %d", port)
+        self.set_status(503)
+        self.write_json({"error": "Motion stream unavailable"})
 
 
 class MJPEGControlHandler(BaseHandler):

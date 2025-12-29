@@ -1,4 +1,4 @@
-/* File Version: 0.38.0 */
+/* File Version: 0.38.1 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -1583,18 +1583,10 @@
                     videoElement.style.display = 'none';
                     imgElement.style.display = 'block';
                     
-                    // Determine stream URL based on source (Motion or internal MJPEG)
-                    let streamUrl;
-                    let streamType = 'MJPEG';
-                    
-                    if (state.motionStreamInfo[cam.id]?.motion_stream_url) {
-                        // Use Motion stream URL
-                        streamUrl = state.motionStreamInfo[cam.id].motion_stream_url;
-                        streamType = 'Motion';
-                    } else {
-                        // Use internal MJPEG stream URL
-                        streamUrl = buildUrl(`/stream/${cam.id}/`);
-                    }
+                    // Always use our internal stream endpoint (it proxies to Motion if needed)
+                    // The backend handles the stream source detection
+                    let streamUrl = buildUrl(`/stream/${cam.id}/`);
+                    let streamType = state.motionStreamInfo[cam.id] ? 'Motion' : 'MJPEG';
                     
                     if (imgElement.src !== streamUrl) {
                         imgElement.src = streamUrl;

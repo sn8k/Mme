@@ -1,5 +1,27 @@
-<!-- File Version: 0.38.8 -->
+<!-- File Version: 0.38.9 -->
 # Changelog
+
+## 0.38.9 - 2025-12-30
+### Fix: Motion Stream Proxy (Complete Fix)
+- **BUG FIX**: Start stream still showed "no signal" with Motion source (v0.38.8 was incomplete).
+- **ROOT CAUSE**: Frontend tried to access Motion URL directly (`http://IP:8081/stream`) which failed:
+  - Motion may listen on `127.0.0.1` only (not accessible from client browser)
+  - Different Motion versions use different stream paths
+- **SOLUTION**: `MJPEGStreamHandler` now proxies Motion stream through our backend.
+  - Client always uses `/stream/{camera_id}/` endpoint
+  - Backend detects Motion source and proxies the stream transparently
+  - Tries multiple Motion URLs: `/{cam}/stream`, `/stream`, `/`
+- **IMPACT**: Start/Stop button works correctly regardless of Motion network config.
+
+### Technical Details
+- `MJPEGStreamHandler.get()`: Added Motion detection and proxy logic (like `FrameHandler`).
+- `MJPEGStreamHandler._proxy_motion_stream()`: New method to proxy Motion MJPEG to client.
+- `updatePreviewGrid()` in main.js: Always uses `/stream/{cam.id}/` (backend handles source).
+
+### File Version Updates
+- handlers.py: v0.30.0 → v0.30.1
+- main.js: v0.38.0 → v0.38.1
+- CHANGELOG.md: v0.38.8 → v0.38.9
 
 ## 0.38.8 - 2025-12-29
 ### Fix: Start/Stop Stream Button with Motion Source
