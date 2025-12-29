@@ -1,4 +1,4 @@
-# File Version: 0.19.1
+# File Version: 0.19.2
 from __future__ import annotations
 
 import argparse
@@ -285,6 +285,7 @@ async def _start_rtsp_streams_on_boot(config_store: ConfigStore) -> None:
     """Start RTSP streams for cameras that have rtsp_enabled=True on server boot."""
     from . import rtsp_server
     from . import mjpeg_server
+    from .config_store import resolve_video_device, resolve_audio_device
     
     rtsp = rtsp_server.get_rtsp_server()
     if not rtsp.is_ffmpeg_available():
@@ -306,9 +307,17 @@ async def _start_rtsp_streams_on_boot(config_store: ConfigStore) -> None:
                 
                 rtsp_port = rtsp.get_rtsp_port_for_camera(cam.identifier)
                 
+                # Resolve the actual device path using stable path if available
+                device_path = cam.device_settings.get("device", "0")
+                stable_path = cam.device_settings.get("stable_device_path", "")
+                resolved_device = resolve_video_device(device_path, stable_path)
+                
+                logging.debug("Camera %s device resolution: %s (stable: %s) -> %s", 
+                            cam.identifier, device_path, stable_path, resolved_device)
+                
                 config = rtsp_server.RTSPStreamConfig(
                     camera_id=cam.identifier,
-                    camera_device=cam.device_settings.get("device", "0"),
+                    camera_device=resolved_device,
                     camera_name=cam.name,
                     resolution=cam.resolution,
                     framerate=cam.framerate,
@@ -321,7 +330,15 @@ async def _start_rtsp_streams_on_boot(config_store: ConfigStore) -> None:
                 if cam.rtsp_audio_device:
                     audio = config_store.get_audio_device(cam.rtsp_audio_device)
                     if audio and audio.enabled:
-                        config.audio_device_id = audio.device_id
+                        # Resolve audio device using stable ID
+                        audio_device = audio.device_id
+                        stable_audio = audio.device_settings.get("stable_id", "")
+                        resolved_audio = resolve_audio_device(audio_device, stable_audio)
+                        
+                        logging.debug("Audio device resolution: %s (stable: %s) -> %s",
+                                    audio_device, stable_audio, resolved_audio)
+                        
+                        config.audio_device_id = resolved_audio
                         config.audio_device_name = audio.name
                         config.audio_sample_rate = audio.sample_rate
                         config.audio_channels = audio.channels

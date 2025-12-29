@@ -1,7 +1,7 @@
-<!-- File Version: 1.21.0 -->
+<!-- File Version: 1.22.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.34.0  
+> **Version** : 0.38.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -1251,7 +1251,8 @@ Chaque caméra est stockée dans un fichier JSON séparé : `config/cameras/{id}
   "name": "Camera Entrée",
   "enabled": true,
   "device_settings": {
-    "device": "/dev/video0"
+    "device": "/dev/video0",
+    "stable_device_path": "/dev/v4l/by-id/usb-HD_Camera_Manufacturer_HD_5000-video-index0"
   },
   "stream_url": "",
   "mjpeg_port": 8081,
@@ -1273,6 +1274,26 @@ Chaque caméra est stockée dans un fichier JSON séparé : `config/cameras/{id}
   "post_capture": 0
 }
 ```
+
+#### Identifiants de périphériques stables (Linux)
+
+Sur Linux/Raspberry Pi, les identifiants `/dev/videoX` changent à chaque redémarrage selon l'ordre de détection des périphériques. Pour résoudre ce problème :
+
+| Champ | Description | Exemple |
+|-------|-------------|---------|
+| `device` | Chemin dynamique (change au reboot) | `/dev/video0` |
+| `stable_device_path` | Chemin stable via udev symlinks | `/dev/v4l/by-id/usb-...-video-index0` |
+
+**Chemins stables disponibles** :
+- `/dev/v4l/by-id/` : Basé sur VID/PID USB et numéro de série (le plus stable)
+- `/dev/v4l/by-path/` : Basé sur le port USB physique (stable si même port)
+
+**Workflow de résolution** :
+1. Au démarrage, `resolve_video_device()` lit le symlink stable
+2. Résout vers le `/dev/videoX` actuel via `os.path.realpath()`
+3. FFmpeg/OpenCV utilisent le chemin résolu
+
+**Auto-détection** : Quand l'utilisateur sélectionne un périphérique, `find_stable_video_path()` détecte automatiquement et sauvegarde le chemin stable.
 
 #### Résolution Capture vs Stream
 
@@ -1321,6 +1342,9 @@ Chaque périphérique audio est stocké dans un fichier JSON séparé : `config/
   "name": "Microphone USB",
   "enabled": true,
   "device_id": "hw:1,0",
+  "device_settings": {
+    "stable_id": "USB Audio Device"
+  },
   "sample_rate": 48000,
   "channels": 2,
   "bit_depth": 16,
@@ -1332,6 +1356,22 @@ Chaque périphérique audio est stocké dans un fichier JSON séparé : `config/
 }
 ```
 
+#### Identifiants audio stables (Linux)
+
+Sur Linux/Raspberry Pi, les identifiants ALSA `hw:X,Y` changent à chaque redémarrage selon l'ordre de détection des cartes son.
+
+| Champ | Description | Exemple |
+|-------|-------------|---------|
+| `device_id` | Identifiant ALSA dynamique (change au reboot) | `hw:1,0` |
+| `device_settings.stable_id` | Nom de la carte son (stable) | `USB Audio Device` |
+
+**Workflow de résolution** :
+1. `resolve_audio_device()` lit `/proc/asound/cards`
+2. Recherche le numéro de carte correspondant au nom `stable_id`
+3. Retourne `hw:X,0` avec le numéro de carte actuel
+
+**Auto-détection** : Quand l'utilisateur ajoute un périphérique audio, `find_stable_audio_id()` extrait automatiquement le nom de la carte depuis `/proc/asound/cards`.
+
 #### Paramètres de configuration audio :
 | Paramètre | Type | Valeur par défaut | Description |
 |-----------|------|-------------------|-------------|
@@ -1339,6 +1379,7 @@ Chaque périphérique audio est stocké dans un fichier JSON séparé : `config/
 | `name` | str | - | Nom d'affichage |
 | `enabled` | bool | `true` | Périphérique actif |
 | `device_id` | str | - | Identifiant système (ex: `hw:0,0`, chemin ALSA) |
+| `device_settings` | dict | `{}` | Paramètres additionnels (dont `stable_id`) |
 | `sample_rate` | int | `48000` | Fréquence d'échantillonnage (Hz) |
 | `channels` | int | `2` | Nombre de canaux (1=mono, 2=stéréo) |
 | `bit_depth` | int | `16` | Profondeur en bits (8, 16, 24, 32) |

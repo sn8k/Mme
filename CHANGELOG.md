@@ -1,5 +1,44 @@
-<!-- File Version: 0.37.0 -->
+<!-- File Version: 0.38.0 -->
 # Changelog
+
+## 0.38.0 - 2025-12-29
+### Stable Device Path Resolution for Linux (Critical Bug Fix)
+- **CRITICAL FIX**: Video and audio device paths (`/dev/videoX`, `hw:X,Y`) no longer break after system reboot.
+- **ROOT CAUSE**: Linux assigns device numbers dynamically based on probe order, which changes between reboots.
+- **SOLUTION**: Use stable device identifiers (`/dev/v4l/by-id/` for video, card names for audio).
+
+### Video Device Resolution
+- **NEW**: `find_stable_video_path(device_path)` - Finds stable symlink path in `/dev/v4l/by-id/` or `/dev/v4l/by-path/`.
+- **NEW**: `resolve_video_device(device_path, stable_path)` - Resolves stable path to current `/dev/videoX` at runtime.
+- **NEW**: Auto-detection of stable path when user configures camera device.
+- **NEW**: `device_settings.stable_device_path` stored in camera config JSON.
+
+### Audio Device Resolution
+- **NEW**: `find_stable_audio_id(device_id)` - Extracts card name from `/proc/asound/cards`.
+- **NEW**: `resolve_audio_device(device_id, stable_id)` - Resolves card name to current `hw:X,Y` at runtime.
+- **NEW**: Auto-detection of stable ID when user adds audio device.
+- **NEW**: `device_settings.stable_id` stored in audio config JSON.
+
+### RTSP Stream Startup Improvements
+- **IMPROVED**: RTSP handler now resolves device paths before starting FFmpeg.
+- **IMPROVED**: Boot auto-start now resolves devices using stable paths.
+- **IMPROVED**: Detailed logging shows device resolution: `device_path (stable: stable_path) -> resolved`.
+
+### Camera Detector Enhancement
+- **EXISTING**: `CameraDetector._get_stable_path()` already populated `stable_path` field in detection results.
+- **ENHANCED**: Now the stable path is persisted to camera config when user selects a device.
+
+### Technical Details
+- On Linux, Raspberry Pi creates many `/dev/video*` devices (bcm2835-isp, unicam, etc.).
+- USB cameras can appear as different `/dev/videoX` after reboot.
+- Solution uses udev symlinks that persist based on USB serial/port.
+- For audio, ALSA card names persist even when card numbers change.
+
+### File Version Updates
+- config_store.py: v0.30.0 → v0.30.1
+- handlers.py: v0.28.3 → v0.28.4
+- server.py: v0.19.1 → v0.19.2
+- CHANGELOG.md: v0.37.0 → v0.38.0
 
 ## 0.37.0 - 2025-12-29
 ### HLS Stream Support for RTSP in UI

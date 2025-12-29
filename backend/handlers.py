@@ -1,4 +1,4 @@
-# File Version: 0.28.3
+# File Version: 0.28.4
 from __future__ import annotations
 
 import base64
@@ -14,7 +14,7 @@ import tornado.web
 import tornado.escape
 import tornado.iostream
 
-from .config_store import ConfigStore
+from .config_store import ConfigStore, resolve_video_device, resolve_audio_device
 from .jinja import render
 from . import camera_detector
 from . import audio_detector
@@ -346,10 +346,17 @@ class ConfigCameraHandler(BaseHandler):
                     rtsp_port = rtsp.get_rtsp_port_for_camera(camera_id)
                     logger.info("RTSP: Using port %d for camera %s", rtsp_port, camera_id)
                     
+                    # Resolve device path using stable path if available
+                    device_path = camera.device_settings.get("device", "0")
+                    stable_path = camera.device_settings.get("stable_device_path", "")
+                    resolved_device = resolve_video_device(device_path, stable_path)
+                    logger.info("RTSP: Device resolution: %s (stable: %s) -> %s", 
+                               device_path, stable_path, resolved_device)
+                    
                     # Build stream config
                     config = rtsp_server.RTSPStreamConfig(
                         camera_id=camera_id,
-                        camera_device=camera.device_settings.get("device", "0"),
+                        camera_device=resolved_device,
                         camera_name=camera.name,
                         resolution=camera.resolution,
                         framerate=camera.framerate,
@@ -365,14 +372,21 @@ class ConfigCameraHandler(BaseHandler):
                         logger.info("RTSP: Adding audio device: %s", new_rtsp_audio)
                         audio = self.config_store.get_audio_device(new_rtsp_audio)
                         if audio and audio.enabled:
-                            config.audio_device_id = audio.device_id
+                            # Resolve audio device using stable ID if available
+                            audio_device_id = audio.device_id
+                            stable_audio_id = audio.device_settings.get("stable_id", "")
+                            resolved_audio = resolve_audio_device(audio_device_id, stable_audio_id)
+                            logger.info("RTSP: Audio device resolution: %s (stable: %s) -> %s", 
+                                       audio_device_id, stable_audio_id, resolved_audio)
+                            
+                            config.audio_device_id = resolved_audio
                             config.audio_device_name = audio.name
                             config.audio_sample_rate = audio.sample_rate
                             config.audio_channels = audio.channels
                             config.audio_bitrate = audio.bitrate
                             config.audio_codec = audio.codec
                             logger.debug("RTSP: Audio config: id=%s, rate=%d, channels=%d",
-                                        audio.device_id, audio.sample_rate, audio.channels)
+                                        resolved_audio, audio.sample_rate, audio.channels)
                     
                     logger.info("RTSP: Calling start_stream()...")
                     status = await rtsp.start_stream(config)

@@ -1,10 +1,12 @@
-# File Version: 0.29.1
+# File Version: 0.30.1
 from __future__ import annotations
 
 import json
 import logging
 import os
 import socket
+import glob
+import platform
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +48,175 @@ def _get_local_ip() -> str:
         return ip
     except Exception:
         return "127.0.0.1"
+
+
+# ============================================================================
+# Stable Device Path Resolution (survives reboots)
+# ============================================================================
+
+def resolve_video_device(device_path: str, stable_path: str = "") -> str:
+    """Resolve the best video device path to use.
+    
+    On Linux, /dev/videoX numbers change between reboots. This function:
+    1. If stable_path is set, resolve it to current /dev/videoX
+    2. If stable_path doesn't exist, try to find it from device_path
+    3. Fall back to device_path if nothing else works
+    
+    Args:
+        device_path: The configured device path (e.g., /dev/video0)
+        stable_path: The stable path from /dev/v4l/by-id/ or /dev/v4l/by-path/
+        
+    Returns:
+        The actual device path to use for capture.
+    """
+    if platform.system().lower() != "linux":
+        return device_path
+    
+    # If we have a stable path, resolve it to the current /dev/videoX
+    if stable_path and os.path.exists(stable_path):
+        try:
+            resolved = os.path.realpath(stable_path)
+            if os.path.exists(resolved):
+                logger.debug("Resolved stable path %s -> %s", stable_path, resolved)
+                return resolved
+        except Exception as e:
+            logger.warning("Failed to resolve stable path %s: %s", stable_path, e)
+    
+    # If device_path exists directly, use it
+    if device_path and os.path.exists(device_path):
+        return device_path
+    
+    # Last resort: return the device_path even if it doesn't exist
+    # (caller will get an error, which is better than silently using wrong device)
+    logger.warning("Video device not found: %s (stable: %s)", device_path, stable_path)
+    return device_path
+
+
+def find_stable_video_path(device_path: str) -> str:
+    """Find the stable path for a video device.
+    
+    Args:
+        device_path: The dynamic device path (e.g., /dev/video0)
+        
+    Returns:
+        Stable path from /dev/v4l/by-id/ or /dev/v4l/by-path/, empty string if not found.
+    """
+    if platform.system().lower() != "linux":
+        return ""
+    
+    if not device_path or not os.path.exists(device_path):
+        return ""
+    
+    try:
+        real_device = os.path.realpath(device_path)
+        
+        # Prefer by-id (based on device serial/model) over by-path (USB port location)
+        for search_dir in ["/dev/v4l/by-id", "/dev/v4l/by-path"]:
+            if not os.path.isdir(search_dir):
+                continue
+            
+            for symlink in glob.glob(f"{search_dir}/*"):
+                try:
+                    if os.path.realpath(symlink) == real_device:
+                        logger.debug("Found stable video path: %s -> %s", device_path, symlink)
+                        return symlink
+                except Exception:
+                    continue
+    except Exception as e:
+        logger.debug("Error finding stable path for %s: %s", device_path, e)
+    
+    return ""
+
+
+def resolve_audio_device(device_id: str, stable_id: str = "") -> str:
+    """Resolve the best audio device ID to use.
+    
+    On Linux, ALSA device numbers (hw:X,Y) change between reboots. This function:
+    1. If stable_id is set, find the current hw:X,Y for that card name
+    2. Fall back to device_id if stable_id resolution fails
+    
+    Args:
+        device_id: The configured device ID (e.g., hw:1,0)
+        stable_id: The stable identifier (card name, e.g., "HD-5000")
+        
+    Returns:
+        The actual ALSA device ID to use for capture.
+    """
+    if platform.system().lower() != "linux":
+        return device_id
+    
+    if not stable_id:
+        return device_id
+    
+    try:
+        # Parse /proc/asound/cards to find the card number by name
+        cards_path = "/proc/asound/cards"
+        if os.path.exists(cards_path):
+            with open(cards_path, "r") as f:
+                content = f.read()
+            
+            # Format: " 0 [PCH            ]: HDA-Intel - HDA Intel PCH"
+            import re
+            for match in re.finditer(r"\s*(\d+)\s+\[([^\]]+)\]:\s+([^\-]+)\s+-\s+(.+)", content):
+                card_num = match.group(1).strip()
+                card_id = match.group(2).strip()
+                driver = match.group(3).strip()
+                card_name = match.group(4).strip()
+                
+                # Check if the stable_id matches any part of the card info
+                if (stable_id.lower() in card_name.lower() or 
+                    stable_id.lower() in card_id.lower() or
+                    stable_id == card_num):
+                    resolved = f"hw:{card_num},0"
+                    logger.debug("Resolved audio stable_id '%s' -> %s (card: %s)", 
+                               stable_id, resolved, card_name)
+                    return resolved
+    except Exception as e:
+        logger.warning("Failed to resolve audio stable_id '%s': %s", stable_id, e)
+    
+    # Fall back to original device_id
+    return device_id
+
+
+def find_stable_audio_id(device_id: str) -> str:
+    """Find a stable identifier for an ALSA audio device.
+    
+    Args:
+        device_id: The dynamic device ID (e.g., hw:1,0)
+        
+    Returns:
+        Stable identifier (card name), empty string if not found.
+    """
+    if platform.system().lower() != "linux":
+        return ""
+    
+    if not device_id:
+        return ""
+    
+    try:
+        import re
+        # Extract card number from hw:X,Y
+        match = re.match(r"hw:(\d+)", device_id)
+        if not match:
+            return ""
+        
+        card_num = match.group(1)
+        
+        # Read card name from /proc/asound/cards
+        cards_path = "/proc/asound/cards"
+        if os.path.exists(cards_path):
+            with open(cards_path, "r") as f:
+                content = f.read()
+            
+            for line_match in re.finditer(r"\s*(\d+)\s+\[([^\]]+)\]:\s+([^\-]+)\s+-\s+(.+)", content):
+                if line_match.group(1).strip() == card_num:
+                    card_name = line_match.group(4).strip()
+                    logger.debug("Found stable audio ID: %s -> '%s'", device_id, card_name)
+                    return card_name
+    except Exception as e:
+        logger.debug("Error finding stable audio ID for %s: %s", device_id, e)
+    
+    return ""
 
 
 @dataclass
@@ -919,7 +1090,17 @@ class ConfigStore:
         if "deviceName" in payload:
             camera.name = payload["deviceName"]
         if "deviceUrl" in payload:
-            camera.device_settings["device"] = payload["deviceUrl"]
+            new_device = payload["deviceUrl"]
+            camera.device_settings["device"] = new_device
+            # Auto-detect and store stable device path on Linux
+            stable_path = find_stable_video_path(new_device)
+            if stable_path:
+                camera.device_settings["stable_device_path"] = stable_path
+                logger.info("Auto-detected stable path for camera %s: %s -> %s", 
+                           camera_id, new_device, stable_path)
+            elif "stable_device_path" in camera.device_settings:
+                # Clear old stable path if device changed but no new stable path found
+                del camera.device_settings["stable_device_path"]
         
         # Video settings
         if "resolution" in payload:
@@ -1253,18 +1434,27 @@ class ConfigStore:
         
         audio_name = name if name else f"Audio {next_id}"
         
+        # Auto-detect stable audio ID on Linux
+        stable_audio_id = find_stable_audio_id(device_id) if device_id else ""
+        device_settings = {}
+        if stable_audio_id:
+            device_settings["stable_id"] = stable_audio_id
+            logger.info("Auto-detected stable audio ID for %s: %s -> '%s'", 
+                       next_id, device_id, stable_audio_id)
+        
         new_audio = AudioConfig(
             identifier=next_id,
             name=audio_name,
             enabled=True,
             device_id=device_id,
+            device_settings=device_settings,
         )
         self._audio_devices[next_id] = new_audio
         
         # Save to individual file
         self._save_audio_config(next_id)
         
-        logger.info("Added audio device %s: %s", next_id, audio_name)
+        logger.info("Added audio device %s: %s (device=%s)", next_id, audio_name, device_id)
         return {
             "status": "ok",
             "audio": {
