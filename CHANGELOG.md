@@ -1,5 +1,16 @@
-<!-- File Version: 0.35.0 -->
+<!-- File Version: 0.35.1 -->
 # Changelog
+
+## 0.35.1 - 2025-12-29
+### Bug Fixes
+- **FIXED**: Toast notifications no longer overlap when multiple appear rapidly.
+- **IMPROVED**: Motion/FFmpeg version detection now searches multiple common paths (`/usr/bin/`, `/usr/local/bin/`, `/opt/`, `/snap/bin/`).
+- **IMPROVED**: Motion version detection uses multiple regex patterns to handle different output formats.
+
+### File Version Updates
+- system_info.py: v0.1.0 → v0.2.0
+- ui.css: v0.3.0 → v0.3.1
+- CHANGELOG.md: v0.35.0 → v0.35.1
 
 ## 0.35.0 - 2025-12-29
 ### General Settings Improvements

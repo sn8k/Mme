@@ -1,4 +1,4 @@
-# File Version: 0.1.0
+# File Version: 0.2.0
 """
 System information detection module for Motion Frontend.
 
@@ -13,9 +13,27 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
+
+# Common paths where Motion might be installed
+MOTION_PATHS = [
+    "motion",  # System PATH
+    "/usr/bin/motion",
+    "/usr/local/bin/motion",
+    "/opt/motion/bin/motion",
+    "/snap/bin/motion",
+]
+
+# Common paths where FFmpeg might be installed
+FFMPEG_PATHS = [
+    "ffmpeg",  # System PATH
+    "/usr/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+    "/opt/ffmpeg/bin/ffmpeg",
+    "/snap/bin/ffmpeg",
+]
 
 
 @dataclass
@@ -24,6 +42,26 @@ class SystemVersions:
     motion_version: Optional[str] = None
     ffmpeg_version: Optional[str] = None
     python_version: Optional[str] = None
+
+
+def _find_executable(candidates: List[str]) -> Optional[str]:
+    """
+    Find the first existing executable from a list of candidates.
+    
+    Args:
+        candidates: List of executable paths to try.
+        
+    Returns:
+        First found executable path, or None if none found.
+    """
+    for candidate in candidates:
+        # Check if it's in PATH or an absolute path that exists
+        if shutil.which(candidate):
+            return candidate
+        # For absolute paths, check directly
+        if candidate.startswith("/") and Path(candidate).exists():
+            return candidate
+    return None
 
 
 def _run_command(cmd: list[str], timeout: int = 5) -> Optional[str]:
@@ -53,31 +91,48 @@ def detect_motion_version() -> Optional[str]:
     """
     Detect Motion version if installed.
     
+    Tries multiple common paths and command line options.
+    
     Returns:
         Version string (e.g., "4.6.0") or None if not found.
     """
-    # Try 'motion -h' first as 'motion --version' may not exist
-    output = _run_command(["motion", "-h"])
+    # Find motion executable
+    motion_bin = _find_executable(MOTION_PATHS)
+    if not motion_bin:
+        logger.debug("Motion executable not found in any known path")
+        return None
+    
+    logger.debug("Found Motion at: %s", motion_bin)
+    
+    # Try 'motion -h' first as 'motion --version' may not exist on all versions
+    output = _run_command([motion_bin, "-h"])
     if output:
-        # Motion help output typically starts with "motion Version X.Y.Z"
-        match = re.search(r"[Mm]otion\s+[Vv]ersion\s+(\d+\.\d+(?:\.\d+)?)", output)
-        if match:
-            version = match.group(1)
-            logger.info("Detected Motion version: %s", version)
-            return version
+        # Motion help output typically starts with "motion Version X.Y.Z" or "Motion 4.x.x"
+        # Try multiple patterns
+        patterns = [
+            r"[Mm]otion\s+[Vv]ersion\s+(\d+\.\d+(?:\.\d+)?)",  # "motion Version 4.6.0"
+            r"[Mm]otion\s+(\d+\.\d+(?:\.\d+)?)",               # "Motion 4.6.0"
+            r"version\s+(\d+\.\d+(?:\.\d+)?)",                  # "version 4.6.0"
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, output, re.IGNORECASE)
+            if match:
+                version = match.group(1)
+                logger.info("Detected Motion version: %s (from -h)", version)
+                return version
     
     # Try 'motion -v' or 'motion --version'
     for flag in ["-v", "--version"]:
-        output = _run_command(["motion", flag])
+        output = _run_command([motion_bin, flag])
         if output:
             # Try to extract version number
             match = re.search(r"(\d+\.\d+(?:\.\d+)?)", output)
             if match:
                 version = match.group(1)
-                logger.info("Detected Motion version: %s", version)
+                logger.info("Detected Motion version: %s (from %s)", version, flag)
                 return version
     
-    logger.debug("Motion not found or version not detectable")
+    logger.debug("Motion found but version not detectable")
     return None
 
 
@@ -85,10 +140,20 @@ def detect_ffmpeg_version() -> Optional[str]:
     """
     Detect FFmpeg version if installed.
     
+    Tries multiple common paths.
+    
     Returns:
         Version string (e.g., "6.1.1") or None if not found.
     """
-    output = _run_command(["ffmpeg", "-version"])
+    # Find ffmpeg executable
+    ffmpeg_bin = _find_executable(FFMPEG_PATHS)
+    if not ffmpeg_bin:
+        logger.debug("FFmpeg executable not found in any known path")
+        return None
+    
+    logger.debug("Found FFmpeg at: %s", ffmpeg_bin)
+    
+    output = _run_command([ffmpeg_bin, "-version"])
     if output:
         # FFmpeg version output: "ffmpeg version N.N.N ..."
         # Can also be "ffmpeg version n6.1-2-g..." for git builds
@@ -105,7 +170,7 @@ def detect_ffmpeg_version() -> Optional[str]:
             logger.info("Detected FFmpeg version: %s", version)
             return version
     
-    logger.debug("FFmpeg not found or version not detectable")
+    logger.debug("FFmpeg found but version not detectable")
     return None
 
 

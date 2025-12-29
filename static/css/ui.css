@@ -1,4 +1,4 @@
-/* File Version: 0.3.0 */
+/* File Version: 0.3.1 */
 :root {
     color-scheme: dark;
     --bg: #0c0e14;
@@ -280,10 +280,8 @@ select.styled {
 }
 
 .toast {
-    position: fixed;
-    right: 1.5rem;
-    bottom: 1.5rem;
     min-width: 18rem;
+    max-width: 24rem;
     background: var(--bg-highlight);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -292,6 +290,7 @@ select.styled {
     opacity: 0;
     transform: translateY(10px);
     animation: toast-in 0.3s forwards;
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 @keyframes toast-in {
