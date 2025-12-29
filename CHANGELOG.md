@@ -1,5 +1,36 @@
-<!-- File Version: 0.38.1 -->
+<!-- File Version: 0.38.3 -->
 # Changelog
+
+## 0.38.3 - 2025-12-29
+### Auto-Detection of Motion Daemon on Linux
+- **NEW**: On Linux, if Motion daemon is running, it is automatically used as MJPEG source.
+- **NEW**: `is_motion_running(port)` function detects if Motion is listening on a port.
+- **NEW**: `get_motion_stream_url()` returns Motion stream URL if available.
+- **BEHAVIOR**: Priority order: RTSP (if enabled) → Motion (if running) → Internal MJPEG server.
+- **OVERRIDE**: Set `stream_source: "internal"` in camera config to force internal MJPEG server.
+- **API**: `/api/mjpeg/` GET now returns `motion_available` boolean.
+- **API**: Camera status includes `motion_auto_detected` when Motion is auto-detected.
+
+### Technical Details
+- Motion detection uses `ss -tlnp` and `pgrep` to verify the daemon is running.
+- Avoids conflict where both Motion and our MJPEG server try to access the camera.
+- Motion handles camera access, text overlay, and motion detection natively.
+
+### File Version Updates
+- handlers.py: v0.28.6 → v0.28.7
+- system_info.py: v0.2.1 → v0.2.2
+- CHANGELOG.md: v0.38.2 → v0.38.3
+
+## 0.38.2 - 2025-12-29
+### Fix: MJPEG Server Missing Stable Path Resolution
+- **FIXED**: MJPEG server now uses stable device path resolution like RTSP.
+- **CAUSE**: `MJPEGControlHandler` and `ConfigCameraHandler` used raw device path without resolution.
+- **IMPACT**: After reboot, MJPEG tried to open wrong `/dev/videoX` device.
+- **SOLUTION**: Added `resolve_video_device()` calls in both handlers.
+
+### File Version Updates
+- handlers.py: v0.28.5 → v0.28.6
+- CHANGELOG.md: v0.38.1 → v0.38.2
 
 ## 0.38.1 - 2025-12-29
 ### Hotfix: MJPEGStreamHandler NameError

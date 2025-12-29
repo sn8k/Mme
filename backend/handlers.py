@@ -1,10 +1,11 @@
-# File Version: 0.28.5
+# File Version: 0.28.7
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
 import logging
+import platform
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from . import mjpeg_server
 from . import meeting_service
 from . import updater
 from . import rtsp_server
+from . import system_info
 from .user_manager import get_user_manager, UserManager, UserRole, User
 
 logger = logging.getLogger(__name__)
@@ -296,11 +298,16 @@ class ConfigCameraHandler(BaseHandler):
                 def verify_stream_auth(username: str, password: str) -> bool:
                     return self.user_manager.verify_credentials(username, password)
                 
-                # Re-add camera with new settings
+                # Re-add camera with new settings - resolve stable device path
                 device_path = camera.device_settings.get("device", "0")
+                stable_path = camera.device_settings.get("stable_device_path", "")
+                resolved_device = resolve_video_device(device_path, stable_path)
+                logger.debug("MJPEG restart: Device resolution for camera %s: %s -> %s",
+                            camera_id, device_path, resolved_device)
+                
                 server.add_camera(
                     camera_id=camera_id,
-                    device_path=device_path,
+                    device_path=resolved_device,
                     name=camera.name,
                     width=width,
                     height=height,
@@ -749,15 +756,25 @@ class MJPEGControlHandler(BaseHandler):
         server = mjpeg_server.get_mjpeg_server()
         status = server.get_all_status()
         
+        # Check if Motion is running (Linux only)
+        motion_available = False
+        if platform.system().lower() == "linux":
+            motion_available = system_info.is_motion_running()
+        
         # Add Motion stream info for cameras using Motion as source
         for camera_id, cam_status in status.items():
             camera = self.config_store.get_camera(camera_id)
-            if camera and camera.stream_source == "motion":
-                cam_status["stream_source"] = "motion"
-                cam_status["motion_stream_port"] = camera.motion_stream_port
+            if camera:
+                motion_port = camera.motion_stream_port or 8081
+                # Auto-detect Motion if not explicitly set to internal
+                if camera.stream_source == "motion" or (motion_available and camera.stream_source != "internal"):
+                    cam_status["stream_source"] = "motion"
+                    cam_status["motion_stream_port"] = motion_port
+                    cam_status["motion_auto_detected"] = camera.stream_source != "motion"
         
         self.write_json({
             "opencv_available": mjpeg_server.is_opencv_available(),
+            "motion_available": motion_available,
             "cameras": status
         })
     
@@ -791,8 +808,24 @@ class MJPEGControlHandler(BaseHandler):
                 })
                 return
             
-            # Check if using Motion as stream source
-            if camera.stream_source == "motion":
+            # On Linux: Auto-detect if Motion is running and use it as source
+            # This is the preferred mode on Linux as Motion handles camera access
+            use_motion = False
+            motion_port = camera.motion_stream_port or 8081
+            
+            if platform.system().lower() == "linux":
+                # Check if stream_source is explicitly set to "internal" (user override)
+                if camera.stream_source == "internal":
+                    logger.debug("MJPEG: Camera %s explicitly set to internal source", camera_id)
+                    use_motion = False
+                elif camera.stream_source == "motion" or system_info.is_motion_running(motion_port):
+                    # Either explicitly set to motion, or auto-detected
+                    if camera.stream_source != "motion":
+                        logger.info("MJPEG: Auto-detected Motion running on port %d for camera %s", 
+                                   motion_port, camera_id)
+                    use_motion = True
+            
+            if use_motion:
                 # For Motion source, we don't start our internal server
                 # Just return success with Motion stream info
                 import socket
@@ -807,15 +840,20 @@ class MJPEGControlHandler(BaseHandler):
                         "camera_id": camera_id,
                         "is_running": True,
                         "stream_source": "motion",
-                        "motion_stream_port": camera.motion_stream_port,
-                        "motion_stream_url": f"http://{server_ip}:{camera.motion_stream_port}/",
+                        "motion_stream_port": motion_port,
+                        "motion_stream_url": f"http://{server_ip}:{motion_port}/",
                         "name": camera.name,
+                        "auto_detected": camera.stream_source != "motion",
                     }
                 })
                 return
             
-            # Get device path
+            # Get device path and resolve stable path if available
             device_path = camera.device_settings.get("device", "0")
+            stable_path = camera.device_settings.get("stable_device_path", "")
+            resolved_device = resolve_video_device(device_path, stable_path)
+            logger.debug("MJPEG: Device resolution for camera %s: %s (stable: %s) -> %s",
+                        camera_id, device_path, stable_path, resolved_device)
             
             # Parse capture resolution (input)
             try:
@@ -837,7 +875,7 @@ class MJPEGControlHandler(BaseHandler):
             if not server.get_camera_status(camera_id).get("exists"):
                 server.add_camera(
                     camera_id=camera_id,
-                    device_path=device_path,
+                    device_path=resolved_device,
                     name=camera.name,
                     width=width,
                     height=height,
