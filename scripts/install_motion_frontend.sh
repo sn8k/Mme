@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.5.2
+# File Version: 1.5.3
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -72,7 +72,7 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Script version (extracted from header)
-SCRIPT_VERSION="1.5.2"
+SCRIPT_VERSION="1.5.3"
 
 # ============================================================================
 # Helper functions
@@ -491,7 +491,7 @@ install_mediamtx() {
     
     case "$arch" in
         aarch64|arm64)
-            mediamtx_arch="arm64v8"
+            mediamtx_arch="arm64"
             ;;
         armv7l|armhf)
             mediamtx_arch="armv7"
