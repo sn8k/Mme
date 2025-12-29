@@ -71,6 +71,9 @@ WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
+# Script version (extracted from header)
+SCRIPT_VERSION="1.5.1"
+
 # ============================================================================
 # Helper functions
 # ============================================================================
@@ -82,6 +85,7 @@ print_banner() {
     echo "║              Motion Frontend - Installateur                      ║"
     echo "║                  Raspberry Pi OS (Trixie)                        ║"
     echo "║                                                                  ║"
+    echo "║                      Version: ${SCRIPT_VERSION}                            ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
