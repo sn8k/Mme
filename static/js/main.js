@@ -638,7 +638,10 @@
                 bindDynamicInputs();
                 
                 // Auto-detect resolutions and controls after config is loaded
-                autoDetectCameraCapabilities();
+                // Use setTimeout to ensure DOM is fully updated
+                setTimeout(() => {
+                    autoDetectCameraCapabilities();
+                }, 100);
             })
             .catch((error) => {
                 motionFrontendUI.showToast(`Camera config error: ${error.message}`, 'error');
@@ -648,41 +651,83 @@
     
     /**
      * Auto-detect camera resolutions and controls when config is loaded.
+     * Shows loading indicator and provides feedback to user.
      */
     async function autoDetectCameraCapabilities() {
         const deviceInput = document.getElementById('deviceUrlEntry');
-        if (!deviceInput || !deviceInput.value) {
-            return; // No device configured, skip auto-detection
+        if (!deviceInput) {
+            console.warn('autoDetectCameraCapabilities: deviceUrlEntry element not found');
+            return;
         }
         
         const devicePath = deviceInput.value;
+        if (!devicePath || devicePath.trim() === '') {
+            console.log('autoDetectCameraCapabilities: No device path configured, skipping');
+            return;
+        }
         
-        // Auto-detect resolutions (silent, no toast unless error)
-        await autoDetectResolutions(devicePath);
+        console.log(`Auto-detecting capabilities for device: ${devicePath}`);
         
-        // Auto-detect controls (silent, no toast unless error)
-        await autoDetectControls(devicePath);
+        // Show loading indicator on detect buttons if they exist
+        const resDetectBtn = document.getElementById('detectResolutionsBtn');
+        const ctrlDetectBtn = document.getElementById('detectCameraControlsBtn');
+        
+        if (resDetectBtn) {
+            resDetectBtn.disabled = true;
+            resDetectBtn.innerHTML = '⏳ Détection...';
+        }
+        if (ctrlDetectBtn) {
+            ctrlDetectBtn.disabled = true;
+            ctrlDetectBtn.innerHTML = '⏳ Détection...';
+        }
+        
+        try {
+            // Auto-detect resolutions
+            await autoDetectResolutions(devicePath);
+            
+            // Auto-detect controls
+            await autoDetectControls(devicePath);
+            
+        } finally {
+            // Restore buttons
+            if (resDetectBtn) {
+                resDetectBtn.disabled = false;
+                resDetectBtn.innerHTML = '🔍 Détecter';
+            }
+            if (ctrlDetectBtn) {
+                ctrlDetectBtn.disabled = false;
+                ctrlDetectBtn.innerHTML = '🔍 Détecter les contrôles';
+            }
+        }
     }
     
     /**
-     * Auto-detect resolutions for a device (silent mode).
+     * Auto-detect resolutions for a device.
+     * Updates the resolution select dropdown with detected values.
      */
     async function autoDetectResolutions(devicePath) {
         const resolutionSelect = document.getElementById('resolutionSelect');
-        if (!resolutionSelect) return;
+        if (!resolutionSelect) {
+            console.warn('autoDetectResolutions: resolutionSelect element not found');
+            return;
+        }
         
         try {
             const encodedPath = encodeURIComponent(devicePath);
+            console.log(`Detecting resolutions for: ${devicePath}`);
+            
             const data = await apiGet(`/api/cameras/capabilities/${encodedPath}`);
             
             if (data.error) {
-                console.debug('Resolution detection error:', data.error);
-                return;
+                console.warn('Resolution detection error:', data.error);
+                // Don't return - we might still have useful data
             }
             
             const resolutions = data.supported_resolutions || [];
+            
             if (resolutions.length === 0) {
-                return; // No resolutions detected, keep defaults
+                console.log('No resolutions detected, keeping defaults');
+                return;
             }
             
             // Keep current value
@@ -723,23 +768,56 @@
                 resolutionSelect.insertBefore(opt, resolutionSelect.firstChild);
             }
             
-            console.log(`Auto-detected ${resolutions.length} resolutions for ${devicePath}`);
+            console.log(`✓ Auto-detected ${resolutions.length} resolutions for ${devicePath}`);
+            
+            // Show brief success indication
+            resolutionSelect.style.borderColor = '#4caf50';
+            setTimeout(() => {
+                resolutionSelect.style.borderColor = '';
+            }, 1500);
             
         } catch (error) {
-            console.debug('Auto-detection of resolutions failed:', error.message);
+            console.error('Auto-detection of resolutions failed:', error.message);
         }
     }
     
     /**
-     * Auto-detect controls for a device (silent mode).
+     * Auto-detect controls for a device.
+     * Updates the camera controls container with detected values.
      */
     async function autoDetectControls(devicePath) {
         const controlsContainer = document.getElementById('cameraControlsContainer');
-        if (!controlsContainer) return;
+        if (!controlsContainer) {
+            console.warn('autoDetectControls: cameraControlsContainer element not found');
+            return;
+        }
         
         try {
             const encodedPath = encodeURIComponent(devicePath);
+            console.log(`Detecting controls for: ${devicePath}`);
+            
+            // Show loading state in container
+            controlsContainer.innerHTML = `
+                <tr class="settings-item">
+                    <td colspan="2" class="detecting-controls">
+                        <em>⏳ Détection des contrôles en cours...</em>
+                    </td>
+                </tr>
+            `;
+            
             const data = await apiGet(`/api/cameras/controls/${encodedPath}`);
+            
+            if (data.error) {
+                console.warn('Controls detection error:', data.error);
+                controlsContainer.innerHTML = `
+                    <tr class="settings-item">
+                        <td colspan="2" class="no-controls">
+                            <em>Erreur: ${escapeHtml(data.error)}</em>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
             
             const controls = data.controls || [];
             
@@ -751,6 +829,7 @@
                         </td>
                     </tr>
                 `;
+                console.log('No controls detected for this device');
                 return;
             }
             
@@ -760,10 +839,17 @@
             // Bind event handlers for controls
             bindCameraControlHandlers(devicePath);
             
-            console.log(`Auto-detected ${controls.length} controls for ${devicePath}`);
+            console.log(`✓ Auto-detected ${controls.length} controls for ${devicePath}`);
             
         } catch (error) {
-            console.debug('Auto-detection of controls failed:', error.message);
+            console.error('Auto-detection of controls failed:', error.message);
+            controlsContainer.innerHTML = `
+                <tr class="settings-item">
+                    <td colspan="2" class="no-controls">
+                        <em>Erreur de détection: ${escapeHtml(error.message)}</em>
+                    </td>
+                </tr>
+            `;
         }
     }
 

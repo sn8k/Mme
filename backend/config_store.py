@@ -711,7 +711,7 @@ class ConfigStore:
                 {"id": "saturation", "label": "Saturation", "type": "range", "value": cam.saturation, "min": -100, "max": 100},
                 {"id": "imageSeparator", "label": "Contrôles avancés", "type": "separator"},
                 {"id": "detectControls", "label": "", "type": "html", "html": '<button type="button" id="detectCameraControlsBtn" class="btn-detect">🔍 Détecter les contrôles</button><div class="detect-hint">Détecte les contrôles disponibles sur le périphérique (V4L2/DirectShow)</div>'},
-                {"id": "cameraControls", "label": "", "type": "html", "html": '<tbody id="cameraControlsContainer"></tbody>'},
+                {"id": "cameraControls", "label": "", "type": "html", "html": '<div id="cameraControlsContainer" class="camera-controls-list"></div>'},
             ],
             "camera_streaming": [
                 {"id": "streamEnabled", "label": "Streaming actif", "type": "bool", "value": cam.enabled},

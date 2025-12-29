@@ -507,13 +507,11 @@ class CameraControlsHandler(BaseHandler):
         device_path = urllib.parse.unquote(device_path)
         controls = camera_detector.detect_camera_controls(device_path)
         
-        # Convert CameraControl dataclasses to dictionaries for JSON serialization
-        controls_dicts = [ctrl.to_dict() for ctrl in controls]
-        
+        # detect_camera_controls already returns dictionaries
         self.write_json({
             "device": device_path,
-            "controls": controls_dicts,
-            "count": len(controls_dicts),
+            "controls": controls,
+            "count": len(controls),
         })
     
     async def post(self, device_path: str) -> None:
