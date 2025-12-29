@@ -1,4 +1,4 @@
-/* File Version: 0.33.0 */
+/* File Version: 0.33.1 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -225,19 +225,22 @@
 
     /**
      * Initialize service control buttons (restart service, download log).
+     * Uses event delegation to handle dynamically rendered buttons.
      */
     function initServiceControls() {
-        // Restart service button
-        const restartBtn = document.getElementById('restartServiceBtn');
-        if (restartBtn) {
-            restartBtn.addEventListener('click', () => confirmRestartService());
-        }
-        
-        // Download log button
-        const downloadLogBtn = document.getElementById('downloadLogBtn');
-        if (downloadLogBtn) {
-            downloadLogBtn.addEventListener('click', () => downloadLog());
-        }
+        // Use event delegation on document for buttons that may be in collapsed sections
+        document.addEventListener('click', (e) => {
+            // Restart service button
+            if (e.target.matches('#restartServiceBtn') || e.target.closest('#restartServiceBtn')) {
+                e.preventDefault();
+                confirmRestartService();
+            }
+            // Download log button
+            if (e.target.matches('#downloadLogBtn') || e.target.closest('#downloadLogBtn')) {
+                e.preventDefault();
+                downloadLog();
+            }
+        });
     }
 
     /**

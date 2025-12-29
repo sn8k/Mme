@@ -4,12 +4,15 @@
 ## 0.35.1 - 2025-12-29
 ### Bug Fixes
 - **FIXED**: Toast notifications no longer overlap when multiple appear rapidly.
+- **FIXED**: "Redémarrer le service" button now works correctly (event delegation).
 - **IMPROVED**: Motion/FFmpeg version detection now searches multiple common paths (`/usr/bin/`, `/usr/local/bin/`, `/opt/`, `/snap/bin/`).
 - **IMPROVED**: Motion version detection uses multiple regex patterns to handle different output formats.
+- **IMPROVED**: Service control buttons use event delegation to handle dynamically rendered elements.
 
 ### File Version Updates
 - system_info.py: v0.1.0 → v0.2.0
 - ui.css: v0.3.0 → v0.3.1
+- main.js: v0.33.0 → v0.33.1
 - CHANGELOG.md: v0.35.0 → v0.35.1
 
 ## 0.35.0 - 2025-12-29
