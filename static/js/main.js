@@ -1,4 +1,4 @@
-/* File Version: 0.38.4 */
+/* File Version: 0.38.5 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -613,6 +613,13 @@
         return apiPost(url, payload)
             .then((response) => {
                 motionFrontendUI.showToast('Configuration saved', 'success');
+                
+                // Show warning if any (e.g., Motion restart needed)
+                if (response && response.warning) {
+                    setTimeout(() => {
+                        motionFrontendUI.showToast(response.warning, 'warning', 8000);
+                    }, 500);
+                }
                 
                 // Handle RTSP auto-start/stop response
                 if (cameraId && response) {

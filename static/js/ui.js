@@ -1,4 +1,4 @@
-/* File Version: 0.2.2 */
+/* File Version: 0.2.3 */
 (function (window, document) {
     'use strict';
 
@@ -90,7 +90,7 @@
         motionFrontendUI.statusElement = document.getElementById('statusMessage');
     }
 
-    function showToast(message, variant = 'info') {
+    function showToast(message, variant = 'info', duration = 4000) {
         ensureContainers();
         const toast = document.createElement('div');
         toast.className = `toast toast-${variant}`;
@@ -99,7 +99,7 @@
         window.setTimeout(() => {
             toast.style.opacity = '0';
             toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-        }, 4000);
+        }, duration);
     }
 
     function setStatus(message) {

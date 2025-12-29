@@ -1,4 +1,4 @@
-# File Version: 0.30.1
+# File Version: 0.30.2
 from __future__ import annotations
 
 import aiohttp
@@ -905,7 +905,7 @@ class MJPEGControlHandler(BaseHandler):
         if platform.system().lower() == "linux":
             motion_running = system_info.is_motion_running()
         
-        # Add Motion stream info for cameras
+        # Add Motion stream info for cameras and fill in config-based stats
         for camera_id, cam_status in status.items():
             camera = self.config_store.get_camera(camera_id)
             if camera:
@@ -913,10 +913,28 @@ class MJPEGControlHandler(BaseHandler):
                 stream_source = camera.stream_source or "auto"
                 
                 # Determine effective source
-                if stream_source == "motion" or (stream_source == "auto" and motion_running):
+                use_motion = stream_source == "motion" or (stream_source == "auto" and motion_running)
+                
+                if use_motion:
                     cam_status["stream_source"] = "motion"
                     cam_status["motion_stream_port"] = motion_port
                     cam_status["motion_auto_detected"] = (stream_source == "auto")
+                    # For Motion source, provide config-based stats (Motion doesn't expose real stats)
+                    # Mark as "running" if Motion is running, so UI shows stream is active
+                    cam_status["is_running"] = motion_running
+                    cam_status["exists"] = True
+                    # Parse resolution from config
+                    try:
+                        w, h = map(int, camera.stream_resolution.split("x"))
+                        cam_status["width"] = w
+                        cam_status["height"] = h
+                    except:
+                        cam_status["width"] = 640
+                        cam_status["height"] = 480
+                    cam_status["fps"] = camera.stream_framerate
+                    # Can't measure real FPS/bandwidth for Motion proxy, use configured values
+                    cam_status["real_fps"] = camera.stream_framerate
+                    cam_status["bandwidth_kbps"] = 0  # Unknown for Motion
                 else:
                     cam_status["stream_source"] = "internal"
         

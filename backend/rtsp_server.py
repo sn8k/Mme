@@ -1,4 +1,4 @@
-# File Version: 0.5.2
+# File Version: 0.5.3
 """
 RTSP Server module for Motion Frontend.
 
@@ -531,6 +531,23 @@ class RTSPServer:
             camera_id=camera_id,
             has_audio=config.audio_device_id is not None
         )
+        
+        # On Linux, check if Motion is using the camera
+        if self._platform != "windows":
+            from . import system_info
+            if system_info.is_motion_running():
+                # Check if camera device is a V4L2 device that Motion might be using
+                device = config.camera_device
+                if device.startswith("/dev/video") or device.isdigit():
+                    status.is_running = False
+                    status.error = (
+                        "Motion daemon is running and likely using this camera. "
+                        "Stop Motion first with 'sudo systemctl stop motion', "
+                        "or set stream source to 'internal' to use our MJPEG server instead."
+                    )
+                    logger.warning("RTSP start blocked: Motion is running and may be using %s", device)
+                    self._stream_status[camera_id] = status
+                    return status
         
         # Check if RTSP server (MediaMTX) is available
         logger.info("Checking RTSP server availability for camera %s on port %d...", camera_id, config.rtsp_port)

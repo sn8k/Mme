@@ -1,4 +1,4 @@
-# File Version: 0.30.7
+# File Version: 0.30.8
 from __future__ import annotations
 
 import json
@@ -956,16 +956,16 @@ class ConfigStore:
                 {"id": "streamSource", "label": "Source du stream", "type": "choices", "choices": self._get_stream_source_choices(), "value": cam.stream_source},
                 {"id": "mjpegPort", "label": "Port MJPEG", "type": "number", "value": cam.mjpeg_port, "min": 1024, "max": 65535},
                 {"id": "motionStreamPort", "label": "Port Motion (si externe)", "type": "number", "value": cam.motion_stream_port, "min": 1024, "max": 65535, "depends": "streamSource=motion"},
-                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled},
-                {"id": "streamUrl", "label": "URL du stream", "type": "html", "html": self._get_stream_url_html(cam, camera_id)},
                 {"id": "streamResolution", "label": "Résolution sortie", "type": "choices", "choices": [
                     {"value": "320x240", "label": "320x240 (QVGA)"},
                     {"value": "640x480", "label": "640x480 (VGA)"},
                     {"value": "1280x720", "label": "1280x720 (720p)"},
                     {"value": "1920x1080", "label": "1920x1080 (1080p)"},
-                ], "value": cam.stream_resolution, "depends": "streamSource=internal"},
-                {"id": "streamFramerate", "label": "Images/sec sortie", "type": "number", "value": cam.stream_framerate, "min": 1, "max": 30, "depends": "streamSource=internal"},
-                {"id": "jpegQuality", "label": "Qualité JPEG (%)", "type": "range", "value": cam.jpeg_quality, "min": 10, "max": 100, "depends": "streamSource=internal"},
+                ], "value": cam.stream_resolution},
+                {"id": "streamFramerate", "label": "Images/sec sortie", "type": "number", "value": cam.stream_framerate, "min": 1, "max": 30},
+                {"id": "jpegQuality", "label": "Qualité JPEG (%)", "type": "range", "value": cam.jpeg_quality, "min": 10, "max": 100},
+                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled},
+                {"id": "streamUrl", "label": "URL du stream", "type": "html", "html": self._get_stream_url_html(cam, camera_id)},
             ],
             "camera_rtsp": [
                 {"id": "rtspEnabled", "label": "Streaming RTSP actif", "type": "bool", "value": cam.rtsp_enabled},
@@ -1196,7 +1196,26 @@ class ConfigStore:
         
         # Save to individual file
         self._save_camera_config(camera_id)
-        return {"status": "ok", "camera": camera_id}
+        
+        # Build response with warnings if needed
+        response = {"status": "ok", "camera": camera_id}
+        
+        # Check if video parameters changed and Motion is running
+        video_params_changed = any(k in payload for k in [
+            "resolution", "framerate", "streamResolution", "streamFramerate", "jpegQuality"
+        ])
+        if video_params_changed:
+            import platform
+            if platform.system().lower() == "linux":
+                from . import system_info
+                if system_info.is_motion_running():
+                    response["warning"] = (
+                        "Les paramètres vidéo ont été sauvegardés. "
+                        "Si Motion gère le flux, redémarrez-le pour appliquer les changements : "
+                        "sudo systemctl restart motion"
+                    )
+        
+        return response
 
     def add_camera(self, name: str = "", device_url: str = "") -> Dict[str, Any]:
         """Add a new camera with its own configuration file."""

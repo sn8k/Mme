@@ -1,5 +1,47 @@
-<!-- File Version: 0.38.13 -->
+<!-- File Version: 0.38.14 -->
 # Changelog
+
+## 0.38.14 - 2025-12-30
+### Fix: 4 Streaming Bugs (RTSP, Motion Restart, MJPEG Params, Live Stats)
+
+#### Bug 1: RTSP "Device or resource busy" Error
+- **BUG FIX**: RTSP streaming now detects Motion daemon before attempting to open camera.
+- **BEHAVIOR**: If Motion is running and using a V4L2 device, RTSP start is blocked with clear error message.
+- **ERROR MESSAGE**: "Motion daemon is running and likely using this camera. Stop Motion first, or use MJPEG streaming via Motion proxy instead."
+
+#### Bug 2: Motion Doesn't Restart on Config Change
+- **BUG FIX**: When video parameters (resolution, framerate, quality) are changed while Motion is running, a warning toast is displayed.
+- **WARNING**: "Les paramètres vidéo ont été sauvegardés. Si Motion gère le flux, redémarrez-le pour appliquer les changements."
+- **NOTE**: Manual restart required - Motion config is outside our control.
+
+#### Bug 3: MJPEG Parameters Hidden for Non-Internal Sources
+- **BUG FIX**: Removed `depends="streamSource=internal"` from streamResolution, streamFramerate, and jpegQuality.
+- **IMPACT**: These parameters are now visible and editable regardless of stream source (auto/internal/motion).
+- **RATIONALE**: These settings should be configurable for all modes.
+
+#### Bug 4: Overlay Stats Not Updating in Live Preview
+- **BUG FIX**: `MJPEGControlHandler.get()` now returns proper stats when Motion is the stream source.
+- **BEHAVIOR**: When Motion source is active:
+  - `is_running`: Set to `true` if Motion daemon is running
+  - `width`/`height`: From camera config (streamResolution)
+  - `real_fps`: From camera config (streamFramerate)
+- **IMPACT**: Frontend stats polling now receives valid data for all stream sources.
+
+### Technical Details
+- `rtsp_server.py::start_stream()`: Added Motion check before FFmpeg process spawn.
+- `config_store.py::save_camera_config()`: Detects video param changes and adds warning to response.
+- `config_store.py::_generate_camera_streaming_config()`: Removed depends conditions.
+- `handlers.py::MJPEGControlHandler.get()`: Added Motion-aware stats population.
+- `main.js::pushConfigs()`: Handles `response.warning` with toast notification.
+- `ui.js::showToast()`: Added `duration` parameter (default 4000ms).
+
+### File Version Updates
+- rtsp_server.py: v0.5.2 → v0.5.3
+- config_store.py: v0.30.7 → v0.30.8
+- handlers.py: v0.30.1 → v0.30.2
+- main.js: v0.38.4 → v0.38.5
+- ui.js: v0.2.2 → v0.2.3
+- CHANGELOG.md: v0.38.13 → v0.38.14
 
 ## 0.38.13 - 2025-12-30
 ### Fix: Camera Resolution Detection When Motion Is Running
