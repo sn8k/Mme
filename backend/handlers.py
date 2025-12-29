@@ -1,4 +1,4 @@
-# File Version: 0.28.4
+# File Version: 0.28.5
 from __future__ import annotations
 
 import base64
@@ -688,8 +688,7 @@ class MJPEGStreamHandler(BaseHandler):
     async def get(self, camera_id: str) -> None:
         """Stream MJPEG frames continuously."""
         # Check if RTSP is enabled in camera config (blocks MJPEG even during RTSP startup)
-        store = config_store.get_config_store()
-        camera_config = store.get_camera(camera_id)
+        camera_config = self.config_store.get_camera(camera_id)
         rtsp_enabled_in_config = camera_config and camera_config.rtsp_enabled
         
         # Also check if RTSP stream is actually running

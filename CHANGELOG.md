@@ -1,5 +1,15 @@
-<!-- File Version: 0.38.0 -->
+<!-- File Version: 0.38.1 -->
 # Changelog
+
+## 0.38.1 - 2025-12-29
+### Hotfix: MJPEGStreamHandler NameError
+- **FIXED**: `NameError: name 'config_store' is not defined` in `MJPEGStreamHandler.get()`.
+- **CAUSE**: Wrong reference `config_store.get_config_store()` instead of `self.config_store`.
+- **IMPACT**: MJPEG streaming crashed with 500 error when trying to view live stream.
+
+### File Version Updates
+- handlers.py: v0.28.4 → v0.28.5
+- CHANGELOG.md: v0.38.0 → v0.38.1
 
 ## 0.38.0 - 2025-12-29
 ### Stable Device Path Resolution for Linux (Critical Bug Fix)
