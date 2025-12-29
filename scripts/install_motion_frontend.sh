@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.1.0
+# File Version: 1.2.0
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -47,10 +47,12 @@ DEFAULT_BRANCH="main"
 DEFAULT_PORT=8765
 DEFAULT_HOST="0.0.0.0"
 
-# Meeting service settings (can be set via command line or prompt)
-MEETING_SERVER_URL=""
+# Meeting service settings
+# Server URL is fixed and cannot be changed
+MEETING_SERVER_URL="https://meeting.ygsoft.fr"
 MEETING_DEVICE_KEY=""
 MEETING_TOKEN_CODE=""
+MEETING_VALIDATED=false
 
 # ============================================================================
 # Colors and formatting
@@ -248,54 +250,180 @@ select_branch() {
 # ============================================================================
 
 configure_meeting_service() {
-    log_step "Configuration du service Meeting (optionnel)"
+    log_step "Configuration du service Meeting"
     
     echo ""
     echo -e "${CYAN}Le service Meeting permet de signaler l'état en ligne de l'appareil${NC}"
     echo -e "${CYAN}à un serveur central (heartbeat).${NC}"
+    echo -e "${CYAN}Serveur Meeting: ${WHITE}${MEETING_SERVER_URL}${NC}"
     echo ""
     
     if ! confirm "Voulez-vous configurer le service Meeting maintenant?" "n"; then
         log_info "Configuration Meeting ignorée (peut être configuré plus tard via l'interface web)"
-        return
+        return 0
     fi
     
     echo ""
-    
-    # Server URL
-    read -r -p "URL du serveur Meeting [https://meeting.example.com]: " input_server
-    if [[ -n "$input_server" ]]; then
-        MEETING_SERVER_URL="$input_server"
-    fi
     
     # Device Key
-    echo ""
     echo -e "${YELLOW}La Device Key est l'identifiant unique de cet appareil.${NC}"
-    echo -e "${YELLOW}Format recommandé: chaîne hexadécimale (ex: F743F2371A834C31B56B3B47708064FF)${NC}"
-    read -r -p "Device Key: " input_device_key
-    if [[ -n "$input_device_key" ]]; then
-        MEETING_DEVICE_KEY="$input_device_key"
-    fi
+    echo -e "${YELLOW}Format: chaîne hexadécimale (ex: F743F2371A834C31B56B3B47708064FF)${NC}"
+    
+    while [[ -z "$MEETING_DEVICE_KEY" ]]; do
+        read -r -p "Device Key: " input_device_key
+        if [[ -n "$input_device_key" ]]; then
+            MEETING_DEVICE_KEY="$input_device_key"
+        else
+            log_warning "La Device Key est obligatoire pour la configuration Meeting"
+            if ! confirm "Réessayer?" "y"; then
+                log_info "Configuration Meeting annulée"
+                return 0
+            fi
+        fi
+    done
     
     # Token Code
     echo ""
-    echo -e "${YELLOW}Le Token Code est le code d'authentification pour le serveur Meeting.${NC}"
-    read -r -p "Token Code: " input_token
-    if [[ -n "$input_token" ]]; then
-        MEETING_TOKEN_CODE="$input_token"
+    echo -e "${YELLOW}Le Token Code est le code d'authentification associé à ce device.${NC}"
+    
+    while [[ -z "$MEETING_TOKEN_CODE" ]]; do
+        read -r -p "Token Code: " input_token
+        if [[ -n "$input_token" ]]; then
+            MEETING_TOKEN_CODE="$input_token"
+        else
+            log_warning "Le Token Code est obligatoire pour la configuration Meeting"
+            if ! confirm "Réessayer?" "y"; then
+                log_info "Configuration Meeting annulée"
+                MEETING_DEVICE_KEY=""
+                return 0
+            fi
+        fi
+    done
+    
+    # Validate with Meeting server
+    echo ""
+    log_info "Vérification des informations sur le serveur Meeting..."
+    
+    if ! validate_meeting_credentials; then
+        # Error already displayed by validate_meeting_credentials
+        exit 1
     fi
     
-    # Summary
-    if [[ -n "$MEETING_SERVER_URL" ]] || [[ -n "$MEETING_DEVICE_KEY" ]] || [[ -n "$MEETING_TOKEN_CODE" ]]; then
+    MEETING_VALIDATED=true
+    log_success "Configuration Meeting validée et token consommé"
+}
+
+# Validate Meeting credentials and burn a token
+validate_meeting_credentials() {
+    local api_url="${MEETING_SERVER_URL}/api/devices/${MEETING_DEVICE_KEY}"
+    
+    # Step 1: Check device exists and get info
+    log_info "Vérification du device sur ${MEETING_SERVER_URL}..."
+    
+    local response
+    response=$(curl -sSL -w "\n%{http_code}" "$api_url" 2>/dev/null)
+    
+    local http_code
+    http_code=$(echo "$response" | tail -n 1)
+    local body
+    body=$(echo "$response" | sed '$d')
+    
+    if [[ "$http_code" != "200" ]]; then
         echo ""
-        log_info "Configuration Meeting:"
-        [[ -n "$MEETING_SERVER_URL" ]] && echo "  - Server URL: $MEETING_SERVER_URL"
-        [[ -n "$MEETING_DEVICE_KEY" ]] && echo "  - Device Key: $MEETING_DEVICE_KEY"
-        [[ -n "$MEETING_TOKEN_CODE" ]] && echo "  - Token Code: ${MEETING_TOKEN_CODE:0:3}***"
-        log_success "Configuration Meeting enregistrée"
-    else
-        log_info "Aucune configuration Meeting saisie"
+        log_error "═══════════════════════════════════════════════════════════════"
+        log_error "ERREUR: Device non trouvé sur le serveur Meeting"
+        log_error "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo -e "${RED}La Device Key '${MEETING_DEVICE_KEY}' n'existe pas${NC}"
+        echo -e "${RED}ou n'est pas accessible sur ${MEETING_SERVER_URL}${NC}"
+        echo ""
+        echo -e "${YELLOW}Vérifiez que:${NC}"
+        echo "  1. La Device Key est correcte"
+        echo "  2. Le device a été créé sur le serveur Meeting"
+        echo "  3. Le serveur Meeting est accessible"
+        echo ""
+        return 1
     fi
+    
+    # Step 2: Verify token_code matches (extract from response)
+    local stored_token
+    stored_token=$(echo "$body" | grep -o '"token_code"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:.*"\([^"]*\)"/\1/')
+    
+    if [[ "$stored_token" != "$MEETING_TOKEN_CODE" ]]; then
+        echo ""
+        log_error "═══════════════════════════════════════════════════════════════"
+        log_error "ERREUR: Token Code invalide"
+        log_error "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo -e "${RED}Le Token Code fourni ne correspond pas à celui${NC}"
+        echo -e "${RED}enregistré sur le serveur Meeting pour ce device.${NC}"
+        echo ""
+        return 1
+    fi
+    
+    log_success "Device Key et Token Code vérifiés"
+    
+    # Step 3: Check available tokens
+    local token_count
+    token_count=$(echo "$body" | grep -o '"token_count"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+    
+    if [[ -z "$token_count" ]] || [[ "$token_count" -le 0 ]]; then
+        echo ""
+        log_error "═══════════════════════════════════════════════════════════════"
+        log_error "ERREUR: Aucun token disponible"
+        log_error "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo -e "${RED}Ce device n'a plus de tokens d'installation disponibles.${NC}"
+        echo ""
+        echo -e "${YELLOW}Chaque installation de Motion Frontend consomme un token.${NC}"
+        echo -e "${YELLOW}Les tokens sont gérés par l'administrateur du serveur Meeting.${NC}"
+        echo ""
+        echo -e "${WHITE}Pour obtenir des tokens supplémentaires:${NC}"
+        echo "  1. Connectez-vous au serveur Meeting"
+        echo "  2. Accédez à la gestion du device: ${MEETING_DEVICE_KEY}"
+        echo "  3. Ajoutez des tokens via l'interface d'administration"
+        echo ""
+        echo -e "${CYAN}Endpoint d'administration:${NC}"
+        echo "  PUT ${MEETING_SERVER_URL}/api/devices/${MEETING_DEVICE_KEY}/tokens"
+        echo "  Body: { \"token_count\": N }"
+        echo ""
+        return 1
+    fi
+    
+    log_info "Tokens disponibles: ${token_count}"
+    
+    # Step 4: Burn a token (flash-request)
+    log_info "Consommation d'un token d'installation..."
+    
+    local flash_response
+    flash_response=$(curl -sSL -w "\n%{http_code}" -X POST "$api_url/flash-request" 2>/dev/null)
+    
+    local flash_http_code
+    flash_http_code=$(echo "$flash_response" | tail -n 1)
+    local flash_body
+    flash_body=$(echo "$flash_response" | sed '$d')
+    
+    if [[ "$flash_http_code" != "200" ]]; then
+        echo ""
+        log_error "═══════════════════════════════════════════════════════════════"
+        log_error "ERREUR: Impossible de consommer le token"
+        log_error "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo -e "${RED}L'appel à flash-request a échoué (HTTP ${flash_http_code})${NC}"
+        echo ""
+        echo -e "${YELLOW}Réponse du serveur:${NC}"
+        echo "$flash_body"
+        echo ""
+        return 1
+    fi
+    
+    # Extract remaining tokens
+    local tokens_left
+    tokens_left=$(echo "$flash_body" | grep -o '"tokens_left"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+    
+    log_success "Token consommé avec succès (restants: ${tokens_left:-?})"
+    
+    return 0
 }
 
 # ============================================================================
@@ -886,9 +1014,24 @@ install() {
         log_info "Utilisation de la branche: $SELECTED_BRANCH"
     fi
     
-    # Configure Meeting service if not already set via command line
-    if [[ -z "$MEETING_DEVICE_KEY" ]] && [[ "$SKIP_MEETING_CONFIG" != true ]]; then
-        configure_meeting_service
+    # Configure and validate Meeting service
+    if [[ "$SKIP_MEETING_CONFIG" != true ]]; then
+        if [[ -n "$MEETING_DEVICE_KEY" ]] && [[ -n "$MEETING_TOKEN_CODE" ]]; then
+            # Credentials provided via command line - validate them
+            log_step "Validation des credentials Meeting"
+            echo -e "${CYAN}Serveur Meeting: ${WHITE}${MEETING_SERVER_URL}${NC}"
+            log_info "Device Key: ${MEETING_DEVICE_KEY}"
+            log_info "Token Code: ${MEETING_TOKEN_CODE:0:3}***"
+            echo ""
+            
+            if ! validate_meeting_credentials; then
+                exit 1
+            fi
+            MEETING_VALIDATED=true
+        else
+            # Interactive configuration
+            configure_meeting_service
+        fi
     fi
     
     echo ""
@@ -896,7 +1039,9 @@ install() {
     echo "  - Branche: $SELECTED_BRANCH"
     echo "  - Répertoire: $INSTALL_DIR"
     echo "  - Port: $DEFAULT_PORT"
-    if [[ -n "$MEETING_DEVICE_KEY" ]]; then
+    if [[ -n "$MEETING_DEVICE_KEY" ]] && [[ "$MEETING_VALIDATED" == true ]]; then
+        echo "  - Meeting Device Key: ${MEETING_DEVICE_KEY:0:8}... ${GREEN}(validé)${NC}"
+    elif [[ -n "$MEETING_DEVICE_KEY" ]]; then
         echo "  - Meeting Device Key: ${MEETING_DEVICE_KEY:0:8}..."
     fi
     echo ""
@@ -933,11 +1078,13 @@ show_help() {
     echo "  --uninstall, -u         Désinstalle Motion Frontend"
     echo "  --update                Met à jour l'installation existante"
     echo ""
-    echo "Configuration Meeting (optionnel):"
-    echo "  --device-key KEY        Device Key pour le service Meeting"
-    echo "  --token TOKEN           Token code pour le service Meeting"
-    echo "  --server-url URL        URL du serveur Meeting"
-    echo "  --skip-meeting          Ne pas demander la configuration Meeting"
+    echo "Configuration Meeting:"
+    echo "  --device-key KEY        Device Key pour le service Meeting (obligatoire avec --token)"
+    echo "  --token TOKEN           Token code pour le service Meeting (obligatoire avec --device-key)"
+    echo "  --skip-meeting          Ne pas configurer le service Meeting"
+    echo ""
+    echo "  Note: Le serveur Meeting est fixé à ${MEETING_SERVER_URL}"
+    echo "        La validation consume un token d'installation sur le serveur."
     echo ""
     echo "Exemples:"
     echo ""
@@ -949,7 +1096,10 @@ show_help() {
     echo ""
     echo "  Installation avec configuration Meeting:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- \\"
-    echo "      --device-key YOUR_DEVICE_KEY --token YOUR_TOKEN --server-url https://meeting.example.com"
+    echo "      --device-key YOUR_DEVICE_KEY --token YOUR_TOKEN"
+    echo ""
+    echo "  Installation sans Meeting:"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --skip-meeting"
     echo ""
     echo "  Désinstallation:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall"
@@ -991,10 +1141,6 @@ main() {
                 ;;
             --token)
                 MEETING_TOKEN_CODE="$2"
-                shift 2
-                ;;
-            --server-url)
-                MEETING_SERVER_URL="$2"
                 shift 2
                 ;;
             --skip-meeting)

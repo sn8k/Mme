@@ -1,5 +1,23 @@
-<!-- File Version: 0.30.0 -->
+<!-- File Version: 0.31.0 -->
 # Changelog
+
+## 0.31.0 - 2025-12-29
+### Meeting Service Validation
+- **NEW**: Meeting credentials validation against server before installation.
+- **NEW**: Automatic token consumption (flash-request) on successful validation.
+- **NEW**: Detailed error messages for invalid device key, wrong token code, or no tokens available.
+- **CHANGED**: Meeting server URL is now fixed (`https://meeting.ygsoft.fr`) and cannot be changed.
+- **REMOVED**: `--server-url` option removed from installer.
+- **CHANGED**: Installation aborts if Meeting validation fails (no tokens, invalid credentials).
+
+### Installation Flow
+- Device key and token code are validated against Meeting API before proceeding.
+- A token is consumed (`POST /api/devices/{device_key}/flash-request`) upon successful validation.
+- Clear error messages explain how to obtain more tokens if none are available.
+
+### File Version Updates
+- install_motion_frontend.sh: v1.1.0 → v1.2.0
+- CHANGELOG.md: v0.30.0 → v0.31.0
 
 ## 0.30.0 - 2025-12-29
 ### Raspberry Pi OS Installer
@@ -19,7 +37,6 @@
 ### Meeting Service Configuration
 - **NEW**: `--device-key` option to set Meeting device key during installation.
 - **NEW**: `--token` option to set Meeting token code during installation.
-- **NEW**: `--server-url` option to set Meeting server URL during installation.
 - **NEW**: `--skip-meeting` option to skip Meeting configuration prompt.
 - **NEW**: Interactive prompt for Meeting configuration if not provided via CLI.
 
@@ -33,15 +50,15 @@ curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion
 
 # Install with Meeting configuration
 curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- \
-  --device-key YOUR_KEY --token YOUR_TOKEN --server-url https://meeting.example.com
+  --device-key YOUR_KEY --token YOUR_TOKEN
 
 # Uninstall
 curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
 ```
 
 ### File Version Updates
-- **NEW**: install_motion_frontend.sh: v1.1.0
-- CHANGELOG.md: v0.29.0 → v0.30.0
+- **NEW**: install_motion_frontend.sh: v1.2.0
+- CHANGELOG.md: v0.29.0 → v0.31.0
 - TECHNICAL_DOCUMENTATION.md: v1.17.0 → v1.18.0
 
 ## 0.29.0 - 2025-12-29
