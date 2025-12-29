@@ -1,5 +1,16 @@
-<!-- File Version: 0.38.6 -->
+<!-- File Version: 0.38.7 -->
 # Changelog
+
+## 0.38.7 - 2025-12-29
+### Fix: stream_source Not Saved
+- **BUG FIX**: `streamSource` (Source du stream) setting was not being saved to camera config.
+- **BUG FIX**: `motionStreamPort` (Port stream Motion) was also not being saved.
+- **CAUSE**: Missing field mappings in `save_camera_config()` function.
+- **IMPACT**: Settings reverted to defaults after restart or page refresh.
+
+### File Version Updates
+- config_store.py: v0.30.3 → v0.30.4
+- CHANGELOG.md: v0.38.6 → v0.38.7
 
 ## 0.38.6 - 2025-12-29
 ### Critical Cross-Platform Fixes (Rapport d'incohérences)

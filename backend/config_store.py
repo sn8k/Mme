@@ -1,4 +1,4 @@
-# File Version: 0.30.3
+# File Version: 0.30.4
 from __future__ import annotations
 
 import json
@@ -1134,6 +1134,10 @@ class ConfigStore:
         # Streaming
         if "streamEnabled" in payload:
             camera.enabled = payload["streamEnabled"] in (True, "true", "1", "on")
+        if "streamSource" in payload:
+            camera.stream_source = payload["streamSource"]
+        if "motionStreamPort" in payload:
+            camera.motion_stream_port = _safe_int(payload["motionStreamPort"], camera.motion_stream_port)
         if "streamAuthEnabled" in payload:
             camera.stream_auth_enabled = payload["streamAuthEnabled"] in (True, "true", "1", "on")
         if "mjpegPort" in payload:
