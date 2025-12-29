@@ -1,4 +1,4 @@
-/* File Version: 0.35.1 */
+/* File Version: 0.35.2 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -2728,6 +2728,9 @@
                 const result = results[index];
                 if (result?.status === 'ok' && result?.camera?.is_running) {
                     state.streamingCameras.add(cam.id);
+                } else if (result?.status === 'skipped' && result?.camera?.rtsp_enabled) {
+                    // RTSP is active for this camera, don't add to streaming cameras
+                    console.log(`Camera ${cam.id}: MJPEG skipped (RTSP active)`);
                 }
             });
             

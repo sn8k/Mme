@@ -1,4 +1,4 @@
-# File Version: 0.28.0
+# File Version: 0.28.1
 from __future__ import annotations
 
 import base64
@@ -751,6 +751,21 @@ class MJPEGControlHandler(BaseHandler):
             camera = self.config_store.get_camera(camera_id)
             if not camera:
                 self.write_json({"error": "Camera not found"}, status=404)
+                return
+            
+            # Check if RTSP is enabled for this camera - don't start MJPEG if so
+            if camera.rtsp_enabled:
+                logger.info("MJPEG start skipped for camera %s: RTSP is active", camera_id)
+                self.write_json({
+                    "status": "skipped",
+                    "reason": "RTSP is active for this camera",
+                    "camera": {
+                        "camera_id": camera_id,
+                        "is_running": False,
+                        "rtsp_enabled": True,
+                        "name": camera.name,
+                    }
+                })
                 return
             
             # Check if using Motion as stream source

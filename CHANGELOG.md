@@ -1,5 +1,22 @@
-<!-- File Version: 0.36.3 -->
+<!-- File Version: 0.36.4 -->
 # Changelog
+
+## 0.36.4 - 2025-12-29
+### RTSP/MJPEG Conflict Fix
+- **FIXED**: MJPEG no longer tries to start when RTSP is active for a camera.
+- **FIXED**: Camera device conflict ("Cannot open camera device") when RTSP was running.
+- **NEW**: `MJPEGControlHandler.post()` now checks `camera.rtsp_enabled` before starting.
+- **NEW**: Returns `status: "skipped"` with reason when RTSP prevents MJPEG start.
+- **IMPROVED**: Frontend JS handles "skipped" status and logs RTSP conflict.
+
+### Technical Changes
+- `backend/handlers.py`: Added RTSP check in MJPEG start action.
+- `static/js/main.js`: Handle `status: "skipped"` response in `autoStartAllStreams()`.
+
+### File Version Updates
+- handlers.py: v0.28.0 → v0.28.1
+- main.js: v0.35.1 → v0.35.2
+- CHANGELOG.md: v0.36.3 → v0.36.4
 
 ## 0.36.3 - 2025-12-29
 ### RTSP Logging - Critical Fix
