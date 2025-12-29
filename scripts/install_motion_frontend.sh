@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.5.3
+# File Version: 1.5.4
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -72,7 +72,7 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Script version (extracted from header)
-SCRIPT_VERSION="1.5.3"
+SCRIPT_VERSION="1.5.4"
 
 # ============================================================================
 # Helper functions
@@ -565,14 +565,16 @@ install_mediamtx() {
         return 1
     fi
     
-    # Install binary
+    # Install binary (use cp+chmod instead of install to avoid conflicts)
     log_info "Installation du binaire MediaMTX..."
-    install -m 755 "$temp_dir/mediamtx" /usr/local/bin/mediamtx
+    cp "$temp_dir/mediamtx" /usr/local/bin/mediamtx
+    chmod 755 /usr/local/bin/mediamtx
     
     # Install default config if not exists
     if [[ ! -f /etc/mediamtx.yml ]]; then
         if [[ -f "$temp_dir/mediamtx.yml" ]]; then
-            install -m 644 "$temp_dir/mediamtx.yml" /etc/mediamtx.yml
+            cp "$temp_dir/mediamtx.yml" /etc/mediamtx.yml
+            chmod 644 /etc/mediamtx.yml
         else
             # Create minimal config for our use case
             cat > /etc/mediamtx.yml << 'MEDIAMTX_CONFIG'
