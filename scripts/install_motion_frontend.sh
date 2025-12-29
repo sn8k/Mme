@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.5.0
+# File Version: 1.5.1
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -505,7 +505,17 @@ install_mediamtx() {
     # Get latest release version from GitHub
     log_info "Récupération de la dernière version de MediaMTX..."
     local latest_version
-    latest_version=$(curl -sSL "https://api.github.com/repos/bluenviron/mediamtx/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+' || echo "")
+    local api_response
+    api_response=$(curl -sSL "https://api.github.com/repos/bluenviron/mediamtx/releases/latest" 2>/dev/null)
+    
+    if [[ -z "$api_response" ]]; then
+        log_warning "Impossible de contacter l'API GitHub"
+        log_warning "Le streaming RTSP ne sera pas disponible"
+        return 1
+    fi
+    
+    # Extract version using sed (more portable than grep -P)
+    latest_version=$(echo "$api_response" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
     
     if [[ -z "$latest_version" ]]; then
         log_warning "Impossible de récupérer la version de MediaMTX"
@@ -515,21 +525,44 @@ install_mediamtx() {
     
     log_info "Téléchargement de MediaMTX $latest_version pour $mediamtx_arch..."
     
+    # MediaMTX release filename format: mediamtx_v1.x.x_linux_arm64v8.tar.gz
     local download_url="https://github.com/bluenviron/mediamtx/releases/download/${latest_version}/mediamtx_${latest_version}_linux_${mediamtx_arch}.tar.gz"
     local temp_dir
     temp_dir=$(mktemp -d)
     
+    log_info "URL: $download_url"
+    
     if ! curl -sSL "$download_url" -o "$temp_dir/mediamtx.tar.gz"; then
-        log_warning "Échec du téléchargement de MediaMTX"
+        log_warning "Échec du téléchargement de MediaMTX depuis $download_url"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Verify download
+    if [[ ! -s "$temp_dir/mediamtx.tar.gz" ]]; then
+        log_warning "Fichier téléchargé vide ou manquant"
         rm -rf "$temp_dir"
         return 1
     fi
     
     # Extract and install
-    log_info "Installation de MediaMTX..."
-    tar -xzf "$temp_dir/mediamtx.tar.gz" -C "$temp_dir"
+    log_info "Extraction de MediaMTX..."
+    if ! tar -xzf "$temp_dir/mediamtx.tar.gz" -C "$temp_dir" 2>&1; then
+        log_warning "Échec de l'extraction de MediaMTX"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Check if binary exists
+    if [[ ! -f "$temp_dir/mediamtx" ]]; then
+        log_warning "Binaire mediamtx non trouvé dans l'archive"
+        ls -la "$temp_dir/" 2>/dev/null || true
+        rm -rf "$temp_dir"
+        return 1
+    fi
     
     # Install binary
+    log_info "Installation du binaire MediaMTX..."
     install -m 755 "$temp_dir/mediamtx" /usr/local/bin/mediamtx
     
     # Install default config if not exists
@@ -1389,11 +1422,13 @@ repair() {
         log_warning "✗ MediaMTX non installé (streaming RTSP non disponible)"
         ((issues_found++))
         
-        if confirm "  Voulez-vous installer MediaMTX?" "y"; then
-            install_mediamtx
+        log_info "  → Installation de MediaMTX..."
+        if install_mediamtx; then
             if command -v mediamtx &> /dev/null; then
                 ((issues_fixed++))
             fi
+        else
+            log_warning "  → Échec de l'installation de MediaMTX (RTSP non disponible)"
         fi
     else
         log_success "✓ MediaMTX installé"
