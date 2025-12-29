@@ -19,6 +19,7 @@
 - **NEW**: "📥 Télécharger le log" button in Logging section.
 - **NEW**: `LogDownloadHandler` endpoint (`GET /api/logs/download/`).
 - **NEW**: Log files downloaded with timestamp in filename.
+- **NEW**: Startup banner in logs: `=========== Mme vX.Y.Z starting ===========`.
 
 ### Installer Updates
 - **CHANGED**: Default hostname set from devicekey (lowercase) during installation.
@@ -27,7 +28,7 @@
 - system_info.py: v0.1.0 (NEW)
 - config_store.py: v0.25.0 → v0.26.0
 - handlers.py: v0.25.0 → v0.26.0
-- server.py: v0.16.0 → v0.17.0
+- server.py: v0.16.0 → v0.18.0
 - main.js: v0.32.0 → v0.33.0
 - main.css: v0.23.0 → v0.24.0
 - install_motion_frontend.sh: v1.3.0 → v1.4.0

@@ -1,4 +1,4 @@
-# File Version: 0.17.0
+# File Version: 0.18.0
 from __future__ import annotations
 
 import argparse
@@ -13,6 +13,7 @@ import tornado.ioloop
 import tornado.web
 
 from .config_store import ConfigStore
+from . import updater
 from .handlers import (
     CameraAddHandler,
     CameraCapabilitiesHandler,
@@ -307,6 +308,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     log_reset_on_start = config_store.get_log_reset_on_start()
     
     _configure_logging(log_level, log_to_file, log_reset_on_start)
+
+    # Display startup banner
+    version = updater.get_current_version()
+    banner = f"=========== Mme v{version} starting ==========="
+    logging.info(banner)
+    print(banner)  # Also print to stdout for interactive mode
 
     root = Path(args.root).resolve()
     settings = ServerSettings(
