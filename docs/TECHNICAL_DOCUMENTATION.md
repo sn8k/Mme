@@ -1,7 +1,7 @@
-<!-- File Version: 1.15.0 -->
+<!-- File Version: 1.17.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.24.0  
+> **Version** : 0.29.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -61,13 +61,14 @@ MmE/
 │   ├── audio_detector.py      # Détection audio cross-platform (v0.1.0)
 │   ├── camera_detector.py     # Détection caméras cross-platform (v0.1.0)
 │   ├── config_store.py        # Stockage configuration (v0.21.0)
-│   ├── handlers.py            # Handlers HTTP Tornado (v0.19.0)
+│   ├── handlers.py            # Handlers HTTP Tornado (v0.22.0)
 │   ├── jinja.py               # Configuration Jinja2 (v0.1.3)
 │   ├── meeting_service.py     # Service Meeting API heartbeat (v0.4.0)
 │   ├── mjpeg_server.py        # Serveur MJPEG streaming dédié (v0.9.0)
-│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.1.0)
-│   ├── server.py              # Point d'entrée serveur (v0.11.0)
+│   ├── rtsp_server.py         # Serveur RTSP avec FFmpeg (v0.3.0)
+│   ├── server.py              # Point d'entrée serveur (v0.15.0)
 │   ├── settings.py            # Paramètres serveur (v0.1.0)
+│   ├── updater.py             # Module de mise à jour GitHub (v1.0.0)
 │   └── user_manager.py        # Gestion utilisateurs bcrypt (v0.1.0)
 │
 ├── config/                     # Fichiers de configuration persistés
@@ -817,6 +818,129 @@ POST /api/rtsp/1/
 GET  /api/meeting/     # Statut du service Meeting
 POST /api/meeting/     # Contrôle du service
 ```
+
+#### API Update (GitHub releases)
+```
+GET  /api/update/                    # Vérifier les mises à jour disponibles
+POST /api/update/                    # Exécuter une action de mise à jour
+```
+
+**Vérifier les mises à jour** :
+```
+GET /api/update/
+GET /api/update/?include_prereleases=true
+```
+
+**Réponse** :
+```json
+{
+    "current_version": "0.27.0",
+    "latest_version": "0.28.0",
+    "update_available": true,
+    "latest_release": {
+        "tag_name": "v0.28.0",
+        "version": "0.28.0",
+        "name": "Release 0.28.0",
+        "body": "### New Features\n- GitHub update functionality...",
+        "published_at": "2025-12-29T10:00:00Z",
+        "html_url": "https://github.com/sn8k/Mme/releases/tag/v0.28.0",
+        "zipball_url": "https://api.github.com/repos/sn8k/Mme/zipball/v0.28.0",
+        "prerelease": false
+    },
+    "error": null
+}
+```
+
+**Exécuter une mise à jour** :
+```json
+POST /api/update/
+{
+    "action": "update",
+    "include_prereleases": false
+}
+```
+
+**Réponse** :
+```json
+{
+    "success": true,
+    "message": "Successfully updated from 0.27.0 to 0.28.0. Please restart the server.",
+    "old_version": "0.27.0",
+    "new_version": "0.28.0",
+    "requires_restart": true,
+    "error": null
+}
+```
+
+**Actions disponibles** :
+- `check` : Vérifier les mises à jour disponibles (par défaut)
+- `update` : Télécharger et appliquer la mise à jour depuis les releases
+- `check_source` : Vérifier les informations du code source (branche)
+- `update_source` : Mettre à jour depuis le code source (branche main)
+- `status` : Obtenir le statut actuel de mise à jour
+
+**Mise à jour depuis le code source (développement)** :
+
+Permet de mettre à jour directement depuis une branche Git (par défaut `main`) pour obtenir les dernières modifications de développement, même sans release officielle.
+
+```json
+POST /api/update/
+{
+    "action": "check_source",
+    "branch": "main"
+}
+```
+
+**Réponse** :
+```json
+{
+    "current_version": "0.28.0",
+    "branch": "main",
+    "source_info": {
+        "branch": "main",
+        "commit_sha": "abc1234",
+        "commit_message": "Fix: resolve camera detection issue",
+        "commit_date": "2025-12-29T15:30:00Z",
+        "html_url": "https://github.com/sn8k/Mme/tree/main",
+        "zipball_url": "https://github.com/sn8k/Mme/archive/refs/heads/main.zip"
+    },
+    "error": null
+}
+```
+
+**Exécuter une mise à jour depuis le source** :
+```json
+POST /api/update/
+{
+    "action": "update_source",
+    "branch": "main"
+}
+```
+
+**Fonctionnement** :
+1. Vérifie la dernière release sur GitHub (https://github.com/sn8k/Mme)
+2. Compare les versions avec le semantic versioning (X.Y.Z avec suffixe lettre optionnel)
+3. Télécharge l'archive ZIP de la release
+4. Crée une sauvegarde automatique dans `backups/`
+5. Extrait et applique les fichiers (sauf `config/` pour préserver les paramètres utilisateur)
+6. Exécute `pip install -r requirements.txt` pour les nouvelles dépendances
+7. Nécessite un redémarrage du serveur pour appliquer les changements
+
+**Configuration optionnelle** :
+- Variable d'environnement `GITHUB_TOKEN` : Token GitHub pour augmenter la limite de requêtes API (60 → 5000 req/h)
+
+**Fichiers mis à jour** :
+- `backend/` : Code serveur
+- `static/` : Assets frontend
+- `templates/` : Templates Jinja2
+- `docs/` : Documentation
+- `scripts/` : Scripts d'installation
+- `requirements.txt`, `CHANGELOG.md`, `README.md`, `agents.md`
+
+**Fichiers préservés** :
+- `config/` : Configuration utilisateur (caméras, audio, paramètres)
+- `logs/` : Journaux d'exécution
+- `backups/` : Sauvegardes précédentes
 
 **Actions POST disponibles** :
 

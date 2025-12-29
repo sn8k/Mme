@@ -33,7 +33,7 @@
 
 
 ## OBLIGATIONS :
-- changelog global a conserver a jour systematiquement.
-- requirements.txt conserver a jour systematiquement.
-- creer une documentation globale : **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)** et la conserver a jour systematiquement.
+- changelog global à conserver a jour systematiquement.
+- requirements.txt à conserver a jour systematiquement.
+- creer une documentation globale : **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)** et la conserver à jour systematiquement. Ne jamais y laisser d'informations obsoletes.
 - projet cross platform windows/raspberrypi os sous debian trixie.

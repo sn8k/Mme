@@ -1,4 +1,4 @@
-# File Version: 0.21.0
+# File Version: 0.23.0
 from __future__ import annotations
 
 import base64
@@ -18,6 +18,7 @@ from . import camera_detector
 from . import audio_detector
 from . import mjpeg_server
 from . import meeting_service
+from . import updater
 from . import rtsp_server
 from .user_manager import get_user_manager, UserManager, UserRole, User
 
@@ -1319,6 +1320,98 @@ class RTSPStreamHandler(BaseHandler):
             self.write_json({"error": f"Unknown action: {action}"}, status=400)
 
 
+# ============================================================================
+# Update Handler
+# ============================================================================
+
+class UpdateHandler(BaseHandler):
+    """Handler for checking and performing updates from GitHub."""
+    
+    async def get(self) -> None:
+        """
+        Check for available updates.
+        
+        Query params:
+            include_prereleases: If "true", include prerelease versions.
+            source: If "true", check source (branch) info instead of releases.
+            branch: Branch name for source check (default: "main").
+        """
+        source_mode = self.get_query_argument("source", "false").lower() == "true"
+        
+        if source_mode:
+            # Check source (branch) info
+            branch = self.get_query_argument("branch", "main")
+            try:
+                source_info = await updater.trigger_source_check(branch)
+                self.write_json(source_info)
+            except Exception as e:
+                self.write_json({
+                    "error": str(e),
+                    "current_version": updater.get_current_version(),
+                    "branch": branch,
+                }, status=500)
+        else:
+            # Check releases
+            include_prereleases = self.get_query_argument("include_prereleases", "false").lower() == "true"
+            try:
+                check_result = await updater.trigger_update_check(include_prereleases)
+                self.write_json(check_result.to_dict())
+            except Exception as e:
+                self.write_json({
+                    "error": str(e),
+                    "current_version": updater.get_current_version(),
+                    "update_available": False,
+                }, status=500)
+    
+    async def post(self) -> None:
+        """
+        Trigger an update.
+        
+        POST body (JSON):
+            action: "check", "update", "check_source", "update_source", or "status"
+            include_prereleases: boolean (default: false) - for release updates
+            branch: string (default: "main") - for source updates
+        """
+        try:
+            data = tornado.escape.json_decode(self.request.body) if self.request.body else {}
+        except json.JSONDecodeError:
+            data = {}
+        
+        action = data.get("action", "check")
+        include_prereleases = data.get("include_prereleases", False)
+        branch = data.get("branch", "main")
+        
+        if action == "check":
+            # Check for release updates
+            check_result = await updater.trigger_update_check(include_prereleases)
+            self.write_json(check_result.to_dict())
+            
+        elif action == "update":
+            # Perform release update
+            update_result = await updater.trigger_update(include_prereleases)
+            status = 200 if update_result.success else 500
+            self.write_json(update_result.to_dict(), status=status)
+            
+        elif action == "check_source":
+            # Check source (branch) info
+            source_info = await updater.trigger_source_check(branch)
+            self.write_json(source_info)
+            
+        elif action == "update_source":
+            # Perform source update from branch
+            update_result = await updater.trigger_source_update(branch)
+            status = 200 if update_result.success else 500
+            self.write_json(update_result.to_dict(), status=status)
+            
+        elif action == "status":
+            # Get current update status
+            status = await updater.get_update_status()
+            self.write_json(status)
+            
+        else:
+            self.write_json({"error": f"Unknown action: {action}"}, status=400)
+
+
 HANDLER_EXPORTS = [
     MainHandler,
     LoginHandler,
@@ -1355,4 +1448,6 @@ HANDLER_EXPORTS = [
     # RTSP handlers
     RTSPStatusHandler,
     RTSPStreamHandler,
+    # Update handler
+    UpdateHandler,
 ]

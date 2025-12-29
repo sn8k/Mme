@@ -1,4 +1,4 @@
-/* File Version: 0.28.0 */
+/* File Version: 0.30.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -1015,15 +1015,327 @@
     }
 
     function triggerUpdate() {
+        // First, check for updates and show modal with info
         motionFrontendUI.setStatus('Checking for updates...');
-        apiPost('/api/update/', {})
-            .then((result) => {
-                motionFrontendUI.showToast(result.message || 'Update triggered', 'success');
+        
+        // Fetch both release and source info in parallel
+        Promise.all([
+            apiGet('/api/update/'),
+            apiPost('/api/update/', { action: 'check_source', branch: 'main' })
+        ])
+            .then(([releaseInfo, sourceInfo]) => {
+                showUpdateModal(releaseInfo, sourceInfo);
             })
             .catch((error) => {
-                motionFrontendUI.showToast(`Update failed: ${error.message}`, 'error');
+                motionFrontendUI.showToast(`Update check failed: ${error.message}`, 'error');
             })
             .finally(() => motionFrontendUI.setStatus('Ready'));
+    }
+
+    function showUpdateModal(updateInfo, sourceInfo) {
+        // Remove existing modal if present
+        const existingModal = document.getElementById('updateModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'updateModal';
+        modal.className = 'modal-overlay';
+        
+        const currentVersion = updateInfo.current_version || 'unknown';
+        const latestVersion = updateInfo.latest_version || 'unknown';
+        const updateAvailable = updateInfo.update_available || false;
+        const releaseNotes = updateInfo.latest_release?.body || '';
+        const releaseUrl = updateInfo.latest_release?.html_url || 'https://github.com/sn8k/Mme/releases';
+        const error = updateInfo.error;
+        
+        // Source info
+        const sourceBranch = sourceInfo?.branch || 'main';
+        const sourceCommit = sourceInfo?.source_info?.commit_sha || 'unknown';
+        const sourceMessage = sourceInfo?.source_info?.commit_message || '';
+        const sourceDate = sourceInfo?.source_info?.commit_date || '';
+        const sourceUrl = sourceInfo?.source_info?.html_url || `https://github.com/sn8k/Mme/tree/${sourceBranch}`;
+        const sourceError = sourceInfo?.error;
+        
+        let statusHtml = '';
+        let actionButtonHtml = '';
+        
+        if (error) {
+            statusHtml = `
+                <div class="update-status update-status-error">
+                    <span class="status-icon">⚠️</span>
+                    <span>Error: ${error}</span>
+                </div>
+            `;
+            actionButtonHtml = `<button type="button" class="button button-secondary" id="retryUpdateCheck">Retry</button>`;
+        } else if (updateAvailable) {
+            statusHtml = `
+                <div class="update-status update-status-available">
+                    <span class="status-icon">🆕</span>
+                    <span>Update available: <strong>${latestVersion}</strong></span>
+                </div>
+            `;
+            actionButtonHtml = `<button type="button" class="button button-primary" id="performUpdate">Install Update</button>`;
+        } else {
+            statusHtml = `
+                <div class="update-status update-status-uptodate">
+                    <span class="status-icon">✓</span>
+                    <span>You are running the latest release version</span>
+                </div>
+            `;
+        }
+        
+        // Format release notes (convert markdown-ish to HTML)
+        const formattedNotes = releaseNotes
+            .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^- (.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+        
+        // Format source date
+        let formattedSourceDate = '';
+        if (sourceDate) {
+            try {
+                formattedSourceDate = new Date(sourceDate).toLocaleString();
+            } catch {
+                formattedSourceDate = sourceDate;
+            }
+        }
+        
+        modal.innerHTML = `
+            <div class="modal-dialog modal-dialog-wide">
+                <div class="modal-header">
+                    <h3>🔄 Software Update</h3>
+                    <button type="button" class="modal-close" id="closeUpdateModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Update mode tabs -->
+                    <div class="update-tabs">
+                        <button type="button" class="update-tab active" data-tab="release">
+                            📦 Releases
+                        </button>
+                        <button type="button" class="update-tab" data-tab="source">
+                            🔧 Source (Dev)
+                        </button>
+                    </div>
+                    
+                    <!-- Release tab content -->
+                    <div id="releaseTab" class="update-tab-content active">
+                        <div class="version-info">
+                            <div class="version-row">
+                                <span class="version-label">Current version:</span>
+                                <span class="version-value">${currentVersion}</span>
+                            </div>
+                            <div class="version-row">
+                                <span class="version-label">Latest release:</span>
+                                <span class="version-value">${latestVersion}</span>
+                            </div>
+                        </div>
+                        ${statusHtml}
+                        ${releaseNotes ? `
+                            <div class="release-notes">
+                                <h4>Release Notes</h4>
+                                <div class="release-notes-content">${formattedNotes}</div>
+                            </div>
+                        ` : ''}
+                        <div class="update-links">
+                            <a href="${releaseUrl}" target="_blank" rel="noopener noreferrer">View releases on GitHub →</a>
+                        </div>
+                    </div>
+                    
+                    <!-- Source tab content -->
+                    <div id="sourceTab" class="update-tab-content">
+                        <div class="source-info-notice">
+                            <span class="notice-icon">⚠️</span>
+                            <span>Source updates install the latest development code. This may include untested features.</span>
+                        </div>
+                        <div class="version-info">
+                            <div class="version-row">
+                                <span class="version-label">Current version:</span>
+                                <span class="version-value">${currentVersion}</span>
+                            </div>
+                            <div class="version-row">
+                                <span class="version-label">Branch:</span>
+                                <span class="version-value">${sourceBranch}</span>
+                            </div>
+                            <div class="version-row">
+                                <span class="version-label">Latest commit:</span>
+                                <span class="version-value commit-sha">${sourceCommit}</span>
+                            </div>
+                            ${sourceDate ? `
+                            <div class="version-row">
+                                <span class="version-label">Commit date:</span>
+                                <span class="version-value">${formattedSourceDate}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        ${sourceMessage ? `
+                            <div class="commit-message">
+                                <strong>Latest commit:</strong> ${sourceMessage}
+                            </div>
+                        ` : ''}
+                        ${sourceError ? `
+                            <div class="update-status update-status-error">
+                                <span class="status-icon">⚠️</span>
+                                <span>Error: ${sourceError}</span>
+                            </div>
+                        ` : `
+                            <div class="update-status update-status-source">
+                                <span class="status-icon">🔧</span>
+                                <span>Update from source to get the latest development version</span>
+                            </div>
+                        `}
+                        <div class="update-links">
+                            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer">View source on GitHub →</a>
+                        </div>
+                    </div>
+                    
+                    <div id="updateProgress" class="update-progress hidden">
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill"></div>
+                        </div>
+                        <div class="progress-text">Updating...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="button button-secondary" id="cancelUpdate">Close</button>
+                    <div id="releaseActions" class="update-actions">
+                        ${actionButtonHtml}
+                    </div>
+                    <div id="sourceActions" class="update-actions hidden">
+                        ${!sourceError ? `<button type="button" class="button button-warning" id="performSourceUpdate">Update from Source</button>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Tab switching
+        const tabs = modal.querySelectorAll('.update-tab');
+        const releaseTab = document.getElementById('releaseTab');
+        const sourceTab = document.getElementById('sourceTab');
+        const releaseActions = document.getElementById('releaseActions');
+        const sourceActions = document.getElementById('sourceActions');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                const tabName = tab.getAttribute('data-tab');
+                if (tabName === 'release') {
+                    releaseTab.classList.add('active');
+                    sourceTab.classList.remove('active');
+                    releaseActions.classList.remove('hidden');
+                    sourceActions.classList.add('hidden');
+                } else {
+                    releaseTab.classList.remove('active');
+                    sourceTab.classList.add('active');
+                    releaseActions.classList.add('hidden');
+                    sourceActions.classList.remove('hidden');
+                }
+            });
+        });
+        
+        // Event handlers
+        const closeModal = () => modal.remove();
+        
+        document.getElementById('closeUpdateModal').addEventListener('click', closeModal);
+        document.getElementById('cancelUpdate').addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        
+        const retryBtn = document.getElementById('retryUpdateCheck');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => {
+                closeModal();
+                triggerUpdate();
+            });
+        }
+        
+        const performBtn = document.getElementById('performUpdate');
+        if (performBtn) {
+            performBtn.addEventListener('click', () => {
+                performUpdate(modal, 'release');
+            });
+        }
+        
+        const performSourceBtn = document.getElementById('performSourceUpdate');
+        if (performSourceBtn) {
+            performSourceBtn.addEventListener('click', () => {
+                performUpdate(modal, 'source', sourceBranch);
+            });
+        }
+    }
+
+    function performUpdate(modal, updateType = 'release', branch = 'main') {
+        const progressDiv = document.getElementById('updateProgress');
+        const progressText = progressDiv.querySelector('.progress-text');
+        const progressFill = progressDiv.querySelector('.progress-bar-fill');
+        const performBtn = document.getElementById('performUpdate');
+        const performSourceBtn = document.getElementById('performSourceUpdate');
+        const cancelBtn = document.getElementById('cancelUpdate');
+        
+        // Show progress, disable buttons
+        progressDiv.classList.remove('hidden');
+        if (performBtn) performBtn.disabled = true;
+        if (performSourceBtn) performSourceBtn.disabled = true;
+        if (cancelBtn) cancelBtn.disabled = true;
+        
+        const isSource = updateType === 'source';
+        progressText.textContent = isSource ? `Downloading source from ${branch}...` : 'Downloading update...';
+        progressFill.style.width = '30%';
+        
+        const payload = isSource 
+            ? { action: 'update_source', branch: branch }
+            : { action: 'update' };
+        
+        apiPost('/api/update/', payload)
+            .then((result) => {
+                if (result.success) {
+                    progressFill.style.width = '100%';
+                    progressText.textContent = result.message || 'Update complete!';
+                    
+                    // Show restart notice
+                    if (result.requires_restart) {
+                        setTimeout(() => {
+                            motionFrontendUI.showToast(
+                                'Update installed! Please restart the server to apply changes.',
+                                'success'
+                            );
+                        }, 1000);
+                        
+                        // Update the modal content
+                        progressText.innerHTML = `
+                            <strong>Update installed!</strong><br>
+                            Updated from ${result.old_version} to ${result.new_version}<br>
+                            <em>Please restart the server to apply changes.</em>
+                        `;
+                    }
+                    
+                    if (cancelBtn) {
+                        cancelBtn.disabled = false;
+                        cancelBtn.textContent = 'Close';
+                    }
+                } else {
+                    throw new Error(result.error || result.message || 'Update failed');
+                }
+            })
+            .catch((error) => {
+                progressFill.style.width = '0%';
+                progressFill.classList.add('error');
+                progressText.textContent = `Update failed: ${error.message}`;
+                
+                motionFrontendUI.showToast(`Update failed: ${error.message}`, 'error');
+                
+                if (performBtn) performBtn.disabled = false;
+                if (cancelBtn) cancelBtn.disabled = false;
+            });
     }
 
     function showAddCameraDialog() {

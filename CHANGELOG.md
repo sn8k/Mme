@@ -1,5 +1,74 @@
-<!-- File Version: 0.27.0 -->
+<!-- File Version: 0.29.0 -->
 # Changelog
+
+## 0.29.0 - 2025-12-29
+### Update from Source Feature
+- **NEW**: "Update from Source" option to update directly from the main branch (development version).
+- **NEW**: Tabbed update modal with "Releases" and "Source (Dev)" tabs.
+- **NEW**: Source info display showing branch name, latest commit SHA, commit message, and date.
+- **NEW**: Warning notice for source updates about untested features.
+- **NEW**: API actions `check_source` and `update_source` in `/api/update/` endpoint.
+
+### Backend Implementation
+- Updated `updater.py` (v1.0.0 → v1.1.0) with source update functions:
+  - `fetch_branch_info()`: Get latest commit info from a branch.
+  - `check_source_updates()`: Check source code info for a branch.
+  - `download_source()`: Download source archive from branch.
+  - `perform_source_update()`: Full source update workflow.
+  - `trigger_source_update()`: Async wrapper for source updates.
+- Updated `UpdateHandler` to support `check_source` and `update_source` actions.
+- Added query parameter `source=true` for GET requests to check source info.
+
+### Frontend Implementation
+- Redesigned update modal with tab interface for releases vs source.
+- Added source info display with commit details and warning notice.
+- Updated `performUpdate()` to handle both release and source updates.
+- Added CSS styles for tabs, source notices, and warning buttons.
+- Added i18n translations for source update strings (EN/FR).
+
+### File Version Updates
+- updater.py: v1.0.0 → v1.1.0
+- handlers.py: v0.22.0 → v0.23.0
+- main.js: v0.29.0 → v0.30.0
+- main.css: v0.20.0 → v0.21.0
+- motion_frontend.en.json: updated
+- motion_frontend.fr.json: updated
+
+## 0.28.0 - 2025-12-29
+### GitHub Update Feature
+- **NEW**: Full GitHub update functionality via UI button "Update".
+- **NEW**: `/api/update/` endpoint to check for updates and perform updates from GitHub.
+- **NEW**: Update modal showing current version, latest version, release notes, and progress.
+- **NEW**: Automatic backup creation before applying updates.
+- **NEW**: Version comparison supporting semantic versioning with letter suffixes (e.g., 1.0.0a).
+- **NEW**: Support for `GITHUB_TOKEN` environment variable to increase API rate limits.
+- **NEW**: Update progress indicator with download/install status.
+
+### Backend Implementation
+- Added `updater.py` module with full GitHub release management:
+  - `check_for_updates()`: Check for new releases from GitHub.
+  - `perform_update()`: Download, extract, and apply updates.
+  - `backup_current_installation()`: Create backup before update.
+  - `install_requirements()`: Run pip install after update.
+- Added `UpdateHandler` in handlers.py with GET (check) and POST (update) actions.
+- Added `/api/update/` route in server.py.
+- GitHub repository: https://github.com/sn8k/Mme
+
+### Frontend Implementation
+- Updated `triggerUpdate()` to display update modal with version info.
+- Added `showUpdateModal()` for rich update UI with release notes.
+- Added `performUpdate()` for async update execution with progress.
+- Added CSS styles for update modal (`.version-info`, `.update-status`, `.release-notes`, `.progress-bar`).
+- Added i18n translations for update-related strings (EN/FR).
+
+### File Version Updates
+- handlers.py: v0.21.0 → v0.22.0
+- server.py: v0.14.0 → v0.15.0
+- main.js: v0.28.0 → v0.29.0
+- main.css: v0.19.0 → v0.20.0
+- motion_frontend.en.json: updated with update strings
+- motion_frontend.fr.json: updated with update strings
+- **NEW**: updater.py: v1.0.0
 
 ## 0.27.0 - 2025-12-29
 ### RTSP/MJPEG Camera Access Conflict Resolution
