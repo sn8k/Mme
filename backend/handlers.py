@@ -1,4 +1,4 @@
-# File Version: 0.26.1
+# File Version: 0.27.0
 from __future__ import annotations
 
 import base64
@@ -701,6 +701,14 @@ class MJPEGControlHandler(BaseHandler):
         """Get status of all MJPEG streams."""
         server = mjpeg_server.get_mjpeg_server()
         status = server.get_all_status()
+        
+        # Add Motion stream info for cameras using Motion as source
+        for camera_id, cam_status in status.items():
+            camera = self.config_store.get_camera(camera_id)
+            if camera and camera.stream_source == "motion":
+                cam_status["stream_source"] = "motion"
+                cam_status["motion_stream_port"] = camera.motion_stream_port
+        
         self.write_json({
             "opencv_available": mjpeg_server.is_opencv_available(),
             "cameras": status
@@ -719,6 +727,29 @@ class MJPEGControlHandler(BaseHandler):
             camera = self.config_store.get_camera(camera_id)
             if not camera:
                 self.write_json({"error": "Camera not found"}, status=404)
+                return
+            
+            # Check if using Motion as stream source
+            if camera.stream_source == "motion":
+                # For Motion source, we don't start our internal server
+                # Just return success with Motion stream info
+                import socket
+                try:
+                    server_ip = socket.gethostbyname(socket.gethostname())
+                except:
+                    server_ip = "localhost"
+                
+                self.write_json({
+                    "status": "ok",
+                    "camera": {
+                        "camera_id": camera_id,
+                        "is_running": True,
+                        "stream_source": "motion",
+                        "motion_stream_port": camera.motion_stream_port,
+                        "motion_stream_url": f"http://{server_ip}:{camera.motion_stream_port}/",
+                        "name": camera.name,
+                    }
+                })
                 return
             
             # Get device path

@@ -1,4 +1,4 @@
-/* File Version: 0.33.2 */
+/* File Version: 0.34.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -17,7 +17,8 @@
         visibleOverlays: new Set(),  // Track which camera overlays are visible
         cameraStats: {},  // Store stats per camera { cameraId: { fps, width, height, bandwidth_kbps } }
         statsPollingHandle: null,  // Handle for stats polling
-        audioDevices: context.audioDevices || []  // Configured audio devices
+        audioDevices: context.audioDevices || [],  // Configured audio devices
+        motionStreamInfo: {},  // Store Motion stream info { cameraId: { motion_stream_url, motion_stream_port } }
     };
 
     function buildUrl(path) {
@@ -1299,8 +1300,19 @@
                 }
                 
                 if (isStreaming && !state.usePolling) {
-                    // Use MJPEG stream URL
-                    const streamUrl = buildUrl(`/stream/${cam.id}/`);
+                    // Determine stream URL based on source (Motion or internal MJPEG)
+                    let streamUrl;
+                    let streamType = 'MJPEG';
+                    
+                    if (state.motionStreamInfo[cam.id]?.motion_stream_url) {
+                        // Use Motion stream URL
+                        streamUrl = state.motionStreamInfo[cam.id].motion_stream_url;
+                        streamType = 'Motion';
+                    } else {
+                        // Use internal MJPEG stream URL
+                        streamUrl = buildUrl(`/stream/${cam.id}/`);
+                    }
+                    
                     if (img.src !== streamUrl) {
                         img.src = streamUrl;
                     }
@@ -1315,7 +1327,7 @@
                         overlay.innerHTML = `
                             <div class="stream-header">
                                 <span class="stream-status live">LIVE</span>
-                                <span class="stream-info">MJPEG</span>
+                                <span class="stream-info">${streamType}</span>
                             </div>
                             <div class="stream-stats">
                                 <span class="stat-item">FPS: ${fpsDisplay}</span>
@@ -1450,15 +1462,31 @@
         try {
             const result = await apiPost('/api/mjpeg/', { action: 'start', camera_id: cameraId });
             
-            if (result.status === 'ok' && result.camera?.is_running) {
-                state.streamingCameras.add(cameraId);
-                motionFrontendUI.showToast(`Stream started`, 'success');
+            if (result.status === 'ok' && result.camera) {
+                const cameraInfo = result.camera;
+                
+                // Check if this is a Motion stream
+                if (cameraInfo.stream_source === 'motion') {
+                    state.motionStreamInfo[cameraId] = {
+                        motion_stream_url: cameraInfo.motion_stream_url,
+                        motion_stream_port: cameraInfo.motion_stream_port,
+                    };
+                    state.streamingCameras.add(cameraId);
+                    motionFrontendUI.showToast(`Stream Motion démarré`, 'success');
+                } else if (cameraInfo.is_running) {
+                    state.streamingCameras.add(cameraId);
+                    motionFrontendUI.showToast(`Stream started`, 'success');
+                } else {
+                    const error = cameraInfo.error || 'Unknown error';
+                    motionFrontendUI.showToast(`Failed to start stream: ${error}`, 'error');
+                    return;
+                }
                 
                 // Switch to streaming mode for this camera
                 state.usePolling = false;
                 updatePreviewGrid();
             } else {
-                const error = result.camera?.error || 'Unknown error';
+                const error = result.error || result.camera?.error || 'Unknown error';
                 motionFrontendUI.showToast(`Failed to start stream: ${error}`, 'error');
             }
         } catch (error) {

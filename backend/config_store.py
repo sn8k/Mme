@@ -1,4 +1,4 @@
-# File Version: 0.26.0
+# File Version: 0.27.0
 from __future__ import annotations
 
 import json
@@ -84,6 +84,9 @@ class CameraConfig:
     overlay_right_text: str = "timestamp"  # camera_name, timestamp, custom, capture_info, disabled
     overlay_right_custom: str = ""
     overlay_text_scale: int = 3  # 1-10
+    # Stream source settings (internal = our MJPEG server, motion = Motion's stream)
+    stream_source: str = "internal"  # "internal" or "motion"
+    motion_stream_port: int = 8081  # Port where Motion exposes its stream
     # RTSP streaming settings
     rtsp_enabled: bool = False
     rtsp_audio_device: str = ""  # Audio device identifier for RTSP stream
@@ -118,6 +121,8 @@ class CameraConfig:
             "overlay_right_text": self.overlay_right_text,
             "overlay_right_custom": self.overlay_right_custom,
             "overlay_text_scale": self.overlay_text_scale,
+            "stream_source": self.stream_source,
+            "motion_stream_port": self.motion_stream_port,
             "rtsp_enabled": self.rtsp_enabled,
             "rtsp_audio_device": self.rtsp_audio_device,
         }
@@ -153,6 +158,8 @@ class CameraConfig:
             overlay_right_custom=data.get("overlay_right_custom", ""),
             overlay_text_scale=data.get("overlay_text_scale", 3),
             stream_auth_enabled=data.get("stream_auth_enabled", False),
+            stream_source=data.get("stream_source", "internal"),
+            motion_stream_port=data.get("motion_stream_port", 8081),
             rtsp_enabled=data.get("rtsp_enabled", False),
             rtsp_audio_device=data.get("rtsp_audio_device", ""),
         )
@@ -629,6 +636,48 @@ class ConfigStore:
                 })
         return choices
 
+    def _get_stream_source_choices(self) -> List[Dict[str, str]]:
+        """Get stream source choices based on Motion availability."""
+        choices = [
+            {"value": "internal", "label": "Serveur MJPEG intégré"},
+        ]
+        
+        # Check if Motion is installed
+        sys_versions = system_info.get_system_versions()
+        if sys_versions.motion_version:
+            choices.append({
+                "value": "motion", 
+                "label": f"Motion ({sys_versions.motion_version})"
+            })
+        
+        return choices
+
+    def _get_stream_url_html(self, cam: CameraConfig, camera_id: str) -> str:
+        """Generate HTML for stream URL display based on stream source."""
+        server_ip = _get_local_ip()
+        
+        if cam.stream_source == "motion":
+            # Motion stream URL
+            stream_url = f"http://{server_ip}:{cam.motion_stream_port}/"
+            return f"""<code id='streamUrlDisplay' class='stream-url' 
+                data-camera-id='{camera_id}' 
+                data-stream-source='motion'
+                data-motion-port='{cam.motion_stream_port}' 
+                data-server-ip='{server_ip}'>{stream_url}</code> 
+                <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>
+                <small class='stream-source-hint'>(flux Motion)</small>"""
+        else:
+            # Internal MJPEG server URL
+            stream_url = f"http://{server_ip}:{cam.mjpeg_port}/stream/"
+            auth_hint = " <small>(🔒 login requis)</small>" if cam.stream_auth_enabled else ""
+            return f"""<code id='streamUrlDisplay' class='stream-url' 
+                data-camera-id='{camera_id}' 
+                data-stream-source='internal'
+                data-mjpeg-port='{cam.mjpeg_port}' 
+                data-server-ip='{server_ip}' 
+                data-auth-enabled='{str(cam.stream_auth_enabled).lower()}'>{stream_url}</code> 
+                <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>{auth_hint}"""
+
     def get_camera_config(self, camera_id: str) -> Dict[str, List[Dict[str, Any]]]:
         """Get camera configuration sections for the UI."""
         cam = self._cameras.get(camera_id)
@@ -666,16 +715,18 @@ class ConfigStore:
             ],
             "camera_streaming": [
                 {"id": "streamEnabled", "label": "Streaming actif", "type": "bool", "value": cam.enabled},
-                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled},
-                {"id": "streamUrl", "label": "URL du stream", "type": "html", "html": f"<code id='streamUrlDisplay' class='stream-url' data-camera-id='{camera_id}' data-mjpeg-port='{cam.mjpeg_port}' data-server-ip='{_get_local_ip()}' data-auth-enabled='{str(cam.stream_auth_enabled).lower()}'>http://{_get_local_ip()}:{cam.mjpeg_port}/stream/</code> <button type='button' class='btn-copy' onclick='copyStreamUrl()' title='Copier'>📋</button>{' <small>(🔒 login requis)</small>' if cam.stream_auth_enabled else ''}"},
+                {"id": "streamSource", "label": "Source du stream", "type": "choices", "choices": self._get_stream_source_choices(), "value": cam.stream_source},
+                {"id": "motionStreamPort", "label": "Port stream Motion", "type": "number", "value": cam.motion_stream_port, "min": 1024, "max": 65535, "depends": "streamSource=motion"},
+                {"id": "streamAuthEnabled", "label": "Authentification requise", "type": "bool", "value": cam.stream_auth_enabled, "depends": "streamSource=internal"},
+                {"id": "streamUrl", "label": "URL du stream", "type": "html", "html": self._get_stream_url_html(cam, camera_id)},
                 {"id": "streamResolution", "label": "Résolution sortie", "type": "choices", "choices": [
                     {"value": "320x240", "label": "320x240 (QVGA)"},
                     {"value": "640x480", "label": "640x480 (VGA)"},
                     {"value": "1280x720", "label": "1280x720 (720p)"},
                     {"value": "1920x1080", "label": "1920x1080 (1080p)"},
-                ], "value": cam.stream_resolution},
-                {"id": "streamFramerate", "label": "Images/sec sortie", "type": "number", "value": cam.stream_framerate, "min": 1, "max": 30},
-                {"id": "jpegQuality", "label": "Qualité JPEG (%)", "type": "range", "value": cam.jpeg_quality, "min": 10, "max": 100},
+                ], "value": cam.stream_resolution, "depends": "streamSource=internal"},
+                {"id": "streamFramerate", "label": "Images/sec sortie", "type": "number", "value": cam.stream_framerate, "min": 1, "max": 30, "depends": "streamSource=internal"},
+                {"id": "jpegQuality", "label": "Qualité JPEG (%)", "type": "range", "value": cam.jpeg_quality, "min": 10, "max": 100, "depends": "streamSource=internal"},
             ],
             "camera_rtsp": [
                 {"id": "rtspEnabled", "label": "Streaming RTSP actif", "type": "bool", "value": cam.rtsp_enabled},

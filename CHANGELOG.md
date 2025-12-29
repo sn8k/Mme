@@ -1,5 +1,40 @@
-<!-- File Version: 0.35.2 -->
+<!-- File Version: 0.35.4 -->
 # Changelog
+
+## 0.35.4 - 2025-12-29
+### Motion Stream Source Feature
+- **NEW**: Option to use Motion as stream source instead of internal MJPEG server.
+- **NEW**: `stream_source` field in camera config (`internal` or `motion`).
+- **NEW**: `motion_stream_port` field (default 8081) for Motion stream URL.
+- **NEW**: Conditional UI - Motion stream options only shown when Motion is detected.
+- **NEW**: Stream type indicator ("Motion" or "MJPEG") displayed in preview overlay.
+- **IMPROVED**: When Motion source is selected, frontend uses Motion's MJPEG URL directly.
+
+### Technical Changes
+- `CameraConfig` dataclass extended with `stream_source` and `motion_stream_port` fields.
+- `_get_stream_source_choices()` returns available stream sources based on Motion availability.
+- `_get_stream_url_html()` generates URL display based on configured stream source.
+- `MJPEGControlHandler` returns Motion stream URL when stream_source is "motion".
+- Frontend `startCameraStream()` stores Motion stream info for use in preview grid.
+- Frontend `updatePreviewGrid()` uses Motion URL when available.
+
+### File Version Updates
+- config_store.py: v0.26.0 → v0.27.0
+- handlers.py: v0.26.1 → v0.27.0
+- main.js: v0.33.3 → v0.34.0
+- CHANGELOG.md: v0.35.3 → v0.35.4
+
+## 0.35.3 - 2025-12-29
+### Camera Detection Fixes
+- **FIXED**: V4L2 resolution detection now works with both `/dev/videoX` and numeric device paths.
+- **FIXED**: Numeric device paths (e.g., "0") are now converted to `/dev/video0` format for v4l2-ctl.
+- **FIXED**: Motion version display now shows "installé" when Motion is found but version cannot be parsed.
+- **IMPROVED**: Better logging for V4L2 detection fallback scenarios.
+
+### File Version Updates
+- mjpeg_server.py: v0.9.1 → v0.9.2
+- system_info.py: v0.2.0 → v0.2.1
+- CHANGELOG.md: v0.35.2 → v0.35.3
 
 ## 0.35.2 - 2025-12-29
 ### Camera Detection Fixes

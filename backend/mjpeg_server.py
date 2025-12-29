@@ -4,7 +4,7 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.1
+Version: 0.9.2
 """
 
 import asyncio
@@ -1026,10 +1026,22 @@ class MJPEGServer:
         }
         
         # On Linux, try v4l2-ctl first (works even if device is busy)
-        if platform.system().lower() == "linux" and not device_path.isdigit():
-            v4l2_result = self._detect_v4l2_resolutions(device_path)
+        is_linux = platform.system().lower() == "linux"
+        is_v4l2_device = device_path.startswith("/dev/video") or (is_linux and device_path.isdigit())
+        
+        if is_linux and is_v4l2_device:
+            # Convert numeric device to /dev/videoN format
+            if device_path.isdigit():
+                device_path_v4l2 = f"/dev/video{device_path}"
+            else:
+                device_path_v4l2 = device_path
+            
+            v4l2_result = self._detect_v4l2_resolutions(device_path_v4l2)
             if v4l2_result["supported_resolutions"]:
                 return v4l2_result
+            # If v4l2-ctl failed but no error, device might be busy - return partial result
+            if not v4l2_result.get("error"):
+                logger.debug("V4L2 detection returned no resolutions for %s", device_path)
         
         if not OPENCV_AVAILABLE:
             result["error"] = "OpenCV not available"

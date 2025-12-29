@@ -1,4 +1,4 @@
-# File Version: 0.2.0
+# File Version: 0.2.1
 """
 System information detection module for Motion Frontend.
 
@@ -132,8 +132,9 @@ def detect_motion_version() -> Optional[str]:
                 logger.info("Detected Motion version: %s (from %s)", version, flag)
                 return version
     
-    logger.debug("Motion found but version not detectable")
-    return None
+    # Motion found but couldn't parse version - return "installed" indicator
+    logger.info("Motion found at %s but version not parseable", motion_bin)
+    return "installé"
 
 
 def detect_ffmpeg_version() -> Optional[str]:
