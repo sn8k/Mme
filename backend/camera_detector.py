@@ -3,7 +3,7 @@
 Camera detection module for Motion Frontend.
 Detects available cameras on Windows and Linux systems.
 
-Version: 0.2.0
+Version: 0.3.0
 """
 
 import platform
@@ -55,6 +55,7 @@ class DetectedCamera:
     capabilities: List[str] = field(default_factory=list)
     is_capture_device: bool = True
     source_type: str = "v4l2"  # v4l2, dshow, csi, usb
+    stable_path: str = ""  # Stable path via /dev/v4l/by-id/ or /dev/v4l/by-path/
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -65,6 +66,7 @@ class DetectedCamera:
             "capabilities": self.capabilities,
             "is_capture_device": self.is_capture_device,
             "source_type": self.source_type,
+            "stable_path": self.stable_path,
         }
 
 
@@ -106,6 +108,49 @@ class CameraDetector:
         """Remove a filter pattern."""
         if pattern in self._filter_patterns:
             self._filter_patterns.remove(pattern)
+    
+    def _get_stable_path(self, device_path: str) -> str:
+        """Get a stable device path that survives reboots.
+        
+        Linux assigns /dev/videoX numbers dynamically based on probe order,
+        which can change between reboots. Stable paths via /dev/v4l/by-id/
+        or /dev/v4l/by-path/ are based on USB port or device serial.
+        
+        Args:
+            device_path: The dynamic device path (e.g., /dev/video0)
+            
+        Returns:
+            Stable path if found, empty string otherwise.
+        """
+        if self._system != "linux":
+            return ""
+        
+        try:
+            import os
+            import glob
+            
+            # Resolve the device to its real path
+            real_device = os.path.realpath(device_path)
+            
+            # Look for stable symlinks in order of preference
+            # by-id is most stable (based on device serial/model)
+            # by-path is based on physical USB port location
+            for search_dir in ["/dev/v4l/by-id", "/dev/v4l/by-path"]:
+                if not os.path.isdir(search_dir):
+                    continue
+                
+                for symlink in glob.glob(f"{search_dir}/*"):
+                    try:
+                        if os.path.realpath(symlink) == real_device:
+                            logger.debug("Found stable path for %s: %s", device_path, symlink)
+                            return symlink
+                    except Exception:
+                        continue
+        
+        except Exception as e:
+            logger.debug("Error finding stable path for %s: %s", device_path, e)
+        
+        return ""
     
     def _should_filter(self, camera: DetectedCamera) -> bool:
         """Check if a camera should be filtered out."""
@@ -206,6 +251,9 @@ class CameraDetector:
                     elif "usb" in current_driver.lower() or "uvc" in current_driver.lower():
                         source_type = "usb"
                     
+                    # Get stable device path
+                    stable_path = self._get_stable_path(device_path)
+                    
                     camera = DetectedCamera(
                         device_path=device_path,
                         name=current_name or f"Camera {device_path}",
@@ -213,6 +261,7 @@ class CameraDetector:
                         capabilities=caps,
                         is_capture_device=is_capture,
                         source_type=source_type,
+                        stable_path=stable_path,
                     )
                     
                     # Only add capture devices
@@ -275,10 +324,14 @@ class CameraDetector:
                 except:
                     pass
                 
+                # Get stable device path
+                stable_path = self._get_stable_path(device_path)
+                
                 camera = DetectedCamera(
                     device_path=device_path,
                     name=name,
                     source_type="v4l2",
+                    stable_path=stable_path,
                 )
                 cameras.append(camera)
         
@@ -819,3 +872,44 @@ def get_filter_patterns() -> List[str]:
 def set_filter_patterns(patterns: List[str]) -> None:
     """Set filter patterns."""
     get_detector().filter_patterns = patterns
+
+
+def get_stable_device_path(device_path: str) -> str:
+    """Get a stable device path for a camera.
+    
+    On Linux, /dev/videoX paths can change between reboots based on
+    probe order. This function returns a stable path via /dev/v4l/by-id/
+    or /dev/v4l/by-path/ that remains consistent.
+    
+    Args:
+        device_path: The device path (e.g., /dev/video0)
+        
+    Returns:
+        Stable path if found, or the original path if not.
+    """
+    detector = get_detector()
+    stable = detector._get_stable_path(device_path)
+    return stable if stable else device_path
+
+
+def resolve_device_path(path: str) -> str:
+    """Resolve a device path (stable or dynamic) to the actual device.
+    
+    If given a stable path (e.g., /dev/v4l/by-id/...), resolves it to
+    the actual device (e.g., /dev/video0). If given a dynamic path,
+    returns it unchanged.
+    
+    Args:
+        path: Device path (stable or dynamic)
+        
+    Returns:
+        The resolved device path.
+    """
+    import os
+    try:
+        if path.startswith("/dev/v4l/"):
+            # This is a stable path, resolve to actual device
+            return os.path.realpath(path)
+        return path
+    except Exception:
+        return path

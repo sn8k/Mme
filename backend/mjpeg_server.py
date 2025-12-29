@@ -4,7 +4,7 @@ MJPEG streaming server for Motion Frontend.
 Captures frames from cameras and streams them via HTTP multipart.
 Each camera has its own dedicated HTTP server on a configurable port.
 
-Version: 0.9.2
+Version: 0.9.3
 """
 
 import asyncio
@@ -313,7 +313,7 @@ class MJPEGServer:
             logger.error("Failed to generate placeholder frame: %s", e)
             self.PLACEHOLDER_FRAME = b''
     
-    def _start_http_server(self, camera: CameraStream, retries: int = 3) -> bool:
+    def _start_http_server(self, camera: CameraStream, retries: int = 5) -> bool:
         """Start dedicated HTTP server for a camera's MJPEG stream.
         
         Args:
@@ -324,8 +324,9 @@ class MJPEGServer:
             True if server started successfully.
         """
         if camera._http_server is not None:
-            logger.warning("HTTP server already running for camera %s", camera.camera_id)
-            return True
+            logger.warning("HTTP server already running for camera %s, stopping first", camera.camera_id)
+            self._stop_http_server(camera)
+            time.sleep(0.5)  # Wait for port to be released
         
         for attempt in range(retries):
             try:
@@ -367,9 +368,9 @@ class MJPEGServer:
             except OSError as e:
                 if e.errno == 98 or e.errno == 10048:  # Address already in use (Linux/Windows)
                     if attempt < retries - 1:
-                        logger.warning("Port %d busy for camera %s, retrying in 0.5s (attempt %d/%d)", 
+                        logger.warning("Port %d busy for camera %s, retrying in 1s (attempt %d/%d)", 
                                      camera.mjpeg_port, camera.camera_id, attempt + 1, retries)
-                        time.sleep(0.5)
+                        time.sleep(1.0)
                         continue
                     logger.error("Port %d still in use for camera %s after %d retries", 
                                camera.mjpeg_port, camera.camera_id, retries)
@@ -400,6 +401,11 @@ class MJPEGServer:
             def shutdown_server():
                 try:
                     http_server.shutdown()
+                    # Close the socket explicitly to release the port
+                    try:
+                        http_server.socket.close()
+                    except Exception:
+                        pass
                     http_server.server_close()
                     logger.debug("HTTP server closed for camera %s", camera.camera_id)
                 except Exception as e:
@@ -408,7 +414,7 @@ class MJPEGServer:
             # Run shutdown in a separate thread to avoid blocking
             shutdown_thread = threading.Thread(target=shutdown_server, daemon=True)
             shutdown_thread.start()
-            shutdown_thread.join(timeout=1.0)  # Wait max 1 second
+            shutdown_thread.join(timeout=2.0)  # Wait max 2 seconds
             
             if shutdown_thread.is_alive():
                 logger.warning("HTTP server shutdown taking too long for camera %s", camera.camera_id)
@@ -417,7 +423,7 @@ class MJPEGServer:
         
         if camera._http_thread is not None:
             if camera._http_thread.is_alive():
-                camera._http_thread.join(timeout=1.0)
+                camera._http_thread.join(timeout=2.0)
             camera._http_thread = None
 
     def add_camera(

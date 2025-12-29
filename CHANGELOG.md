@@ -1,5 +1,28 @@
-<!-- File Version: 0.35.4 -->
+<!-- File Version: 0.35.5 -->
 # Changelog
+
+## 0.35.5 - 2025-12-29
+### Service Restart & Camera Stability Fixes
+- **FIXED**: Port release issue during camera restart - HTTP server is now properly stopped before restarting.
+- **FIXED**: Increased retry attempts (3→5) and delay (0.5s→1s) when port is busy.
+- **FIXED**: HTTP server shutdown now explicitly closes socket to ensure port is released.
+- **IMPROVED**: Join timeout for HTTP threads increased (1s→2s) for more reliable shutdown.
+- **NEW**: Camera stable path detection via `/dev/v4l/by-id/` and `/dev/v4l/by-path/`.
+- **NEW**: `stable_path` field in `DetectedCamera` dataclass for persistent device identification.
+- **NEW**: `get_stable_device_path()` and `resolve_device_path()` utility functions.
+- **INFO**: Stable paths survive reboots and USB port changes (based on device serial/model).
+
+### Technical Changes
+- `_start_http_server()`: Now stops existing server before starting, retries increased to 5.
+- `_stop_http_server()`: Explicitly closes socket and increases join timeout.
+- `_get_stable_path()`: New method to find stable symlinks in `/dev/v4l/by-id/` or `/dev/v4l/by-path/`.
+- `DetectedCamera.stable_path`: New field for stable device path.
+- Module-level functions `get_stable_device_path()` and `resolve_device_path()` added.
+
+### File Version Updates
+- mjpeg_server.py: v0.9.2 → v0.9.3
+- camera_detector.py: v0.2.0 → v0.3.0
+- CHANGELOG.md: v0.35.4 → v0.35.5
 
 ## 0.35.4 - 2025-12-29
 ### Motion Stream Source Feature
