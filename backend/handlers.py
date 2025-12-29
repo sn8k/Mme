@@ -1,4 +1,4 @@
-# File Version: 0.29.0
+# File Version: 0.30.0
 from __future__ import annotations
 
 import aiohttp
@@ -920,6 +920,11 @@ class MJPEGControlHandler(BaseHandler):
                 except:
                     server_ip = "localhost"
                 
+                # Build correct Motion stream URL
+                # Motion 4.x exposes streams at /stream or /{camera_id}/stream
+                # We'll use /stream which is the most common configuration
+                motion_stream_url = f"http://{server_ip}:{motion_port}/stream"
+                
                 self.write_json({
                     "status": "ok",
                     "camera": {
@@ -927,7 +932,7 @@ class MJPEGControlHandler(BaseHandler):
                         "is_running": True,
                         "stream_source": "motion",
                         "motion_stream_port": motion_port,
-                        "motion_stream_url": f"http://{server_ip}:{motion_port}/",
+                        "motion_stream_url": motion_stream_url,
                         "name": camera.name,
                         "auto_detected": camera.stream_source != "motion",
                     }
@@ -997,6 +1002,30 @@ class MJPEGControlHandler(BaseHandler):
             })
         
         elif action == "stop":
+            # Check if this camera uses Motion - if so, we don't need to stop anything
+            camera = self.config_store.get_camera(camera_id)
+            stream_source = camera.stream_source if camera else "auto"
+            motion_running = False
+            if platform.system().lower() == "linux":
+                motion_port = camera.motion_stream_port if camera else 8081
+                motion_running = system_info.is_motion_running(motion_port)
+            
+            use_motion = stream_source == "motion" or (stream_source == "auto" and motion_running)
+            
+            if use_motion:
+                # Motion is managing the stream, nothing to stop on our side
+                logger.debug("MJPEG stop: Camera %s uses Motion, no internal server to stop", camera_id)
+                self.write_json({
+                    "status": "ok",
+                    "camera": {
+                        "camera_id": camera_id,
+                        "is_running": False,
+                        "stream_source": "motion",
+                    }
+                })
+                return
+            
+            # Stop internal MJPEG server
             success = server.stop_camera(camera_id)
             self.write_json({
                 "status": "ok" if success else "error",

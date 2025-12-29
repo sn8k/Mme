@@ -1,5 +1,23 @@
-<!-- File Version: 0.38.7 -->
+<!-- File Version: 0.38.8 -->
 # Changelog
+
+## 0.38.8 - 2025-12-29
+### Fix: Start/Stop Stream Button with Motion Source
+- **BUG FIX**: "Start stream" button showed "no signal" when Motion was the stream source.
+- **CAUSE 1**: Motion stream URL was `http://IP:8081/` (homepage) instead of `http://IP:8081/stream` (MJPEG stream).
+- **CAUSE 2**: "Stop stream" action always tried to stop internal MJPEG server, even when Motion was active.
+- **CAUSE 3**: Frontend didn't clean up `motionStreamInfo` state when stopping stream.
+- **IMPACT**: Start/Stop button now works correctly when Motion daemon is the stream source.
+
+### Technical Details
+- `MJPEGControlHandler.post()` start action: Now returns correct Motion stream URL with `/stream` suffix.
+- `MJPEGControlHandler.post()` stop action: Now checks `stream_source` and skips internal server stop for Motion.
+- `stopCameraStream()` in main.js: Now cleans up `state.motionStreamInfo[cameraId]` on stop.
+
+### File Version Updates
+- handlers.py: v0.29.0 → v0.30.0
+- main.js: v0.37.0 → v0.38.0
+- CHANGELOG.md: v0.38.7 → v0.38.8
 
 ## 0.38.7 - 2025-12-29
 ### Fix: stream_source Not Saved

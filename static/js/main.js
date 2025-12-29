@@ -1,4 +1,4 @@
-/* File Version: 0.37.0 */
+/* File Version: 0.38.0 */
 (function (window, document, fetch) {
     'use strict';
 
@@ -1799,6 +1799,8 @@
         try {
             await apiPost('/api/mjpeg/', { action: 'stop', camera_id: cameraId });
             state.streamingCameras.delete(cameraId);
+            // Clean up Motion stream info if any
+            delete state.motionStreamInfo[cameraId];
             motionFrontendUI.showToast(`Stream stopped`, 'success');
             
             // Check if we should switch back to polling mode
