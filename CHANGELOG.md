@@ -1,5 +1,31 @@
-<!-- File Version: 0.31.0 -->
+<!-- File Version: 0.32.0 -->
 # Changelog
+
+## 0.32.0 - 2025-12-29
+### Repair Function for Raspberry Pi Installer
+- **NEW**: `--repair` option to verify and fix installation integrity.
+- **NEW**: Automated checks for:
+  - Installation directory and subdirectories (backend, static, templates, config, logs)
+  - System user and group existence and group memberships
+  - Python virtual environment and dependencies
+  - systemd service file and enabled status
+  - File and directory permissions
+  - Configuration files presence
+  - Meeting configuration (without burning tokens)
+- **NEW**: Automatic fix for minor issues (missing directories, permissions, group memberships).
+- **NEW**: Reinstallation offer when installation is too damaged to repair.
+- **NEW**: Configuration preservation during reinstallation from repair mode.
+- **CHANGED**: Repair mode validates Meeting credentials without consuming tokens.
+
+### Installation Commands
+```bash
+# Repair existing installation
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --repair
+```
+
+### File Version Updates
+- install_motion_frontend.sh: v1.2.3 → v1.3.0
+- CHANGELOG.md: v0.31.0 → v0.32.0
 
 ## 0.31.0 - 2025-12-29
 ### Meeting Service Validation

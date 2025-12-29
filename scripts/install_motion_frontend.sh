@@ -1,5 +1,5 @@
 #!/bin/bash
-# File Version: 1.2.0
+# File Version: 1.3.0
 # ============================================================================
 # Motion Frontend - Installateur pour Raspberry Pi OS (Debian Trixie)
 # ============================================================================
@@ -12,11 +12,14 @@
 #   Installation avec choix de branche:
 #     curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --branch
 #
+#   Réparation:
+#     curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --repair
+#
 #   Désinstallation:
 #     curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall
 #
 #   Ou si le script est déjà téléchargé:
-#     sudo ./install_motion_frontend.sh [--branch] [--uninstall] [--help]
+#     sudo ./install_motion_frontend.sh [--branch] [--uninstall] [--repair] [--help]
 #
 # ============================================================================
 
@@ -522,6 +525,7 @@ create_directories() {
     fi
     
     mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR/logs"  # Application logs directory
     mkdir -p "$CONFIG_DIR"
     mkdir -p "$LOG_DIR"
     
@@ -650,24 +654,9 @@ setup_configuration() {
 EOF
     fi
     
-    # Create users.json if it doesn't exist
-    if [[ ! -f "$app_config_dir/users.json" ]]; then
-        log_info "Création du fichier utilisateurs..."
-        cat > "$app_config_dir/users.json" << 'EOF'
-{
-  "users": {
-    "admin": {
-      "password_hash": "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4o0sH1LcPGGXZFO2",
-      "role": "admin",
-      "enabled": true,
-      "must_change_password": true,
-      "created_at": "2025-01-01T00:00:00"
-    }
-  }
-}
-EOF
-        # Note: Default password is 'admin' - user must change it on first login
-    fi
+    # Note: users.json is NOT created here - the UserManager will create it
+    # automatically on first startup with properly hashed default passwords.
+    # Default credentials: admin/admin (must change on first login)
     
     log_success "Configuration créée"
 }
@@ -733,6 +722,7 @@ set_permissions() {
     chmod -R 755 "$INSTALL_DIR"
     chmod -R 750 "$INSTALL_DIR/config"
     chmod 640 "$INSTALL_DIR/config"/*.json 2>/dev/null || true
+    chmod -R 755 "$INSTALL_DIR/logs"  # Ensure logs directory is writable
     chmod -R 755 "$LOG_DIR"
     
     # Make scripts executable
@@ -760,6 +750,7 @@ Group=${SERVICE_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONUNBUFFERED=1"
+Environment="HOME=${INSTALL_DIR}"
 
 ExecStart=${VENV_DIR}/bin/python -m backend.server \\
     --host ${DEFAULT_HOST} \\
@@ -771,11 +762,8 @@ RestartSec=5
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
-# Security hardening
+# Security hardening (compatible with all systems)
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=${INSTALL_DIR}/config ${INSTALL_DIR}/logs ${LOG_DIR}
 PrivateTmp=true
 
 # Logging
@@ -996,6 +984,352 @@ update() {
 }
 
 # ============================================================================
+# Repair function
+# ============================================================================
+
+repair() {
+    print_banner
+    
+    log_step "Réparation de Motion Frontend"
+    
+    local issues_found=0
+    local issues_fixed=0
+    local needs_reinstall=false
+    
+    echo ""
+    echo -e "${CYAN}Vérification de l'intégrité de l'installation...${NC}"
+    echo "─────────────────────────────────────────────────────────────────────"
+    echo ""
+    
+    # ========================================================================
+    # Check 1: Installation directory
+    # ========================================================================
+    log_info "Vérification du répertoire d'installation..."
+    
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        log_error "✗ Répertoire d'installation absent: $INSTALL_DIR"
+        needs_reinstall=true
+        ((issues_found++))
+    else
+        log_success "✓ Répertoire d'installation présent"
+        
+        # Check subdirectories
+        local required_dirs=("backend" "static" "templates" "config" "logs")
+        for dir in "${required_dirs[@]}"; do
+            if [[ ! -d "$INSTALL_DIR/$dir" ]]; then
+                log_warning "✗ Sous-répertoire manquant: $dir"
+                ((issues_found++))
+                
+                if [[ "$dir" == "logs" ]] || [[ "$dir" == "config" ]]; then
+                    log_info "  → Création de $INSTALL_DIR/$dir"
+                    mkdir -p "$INSTALL_DIR/$dir"
+                    ((issues_fixed++))
+                else
+                    needs_reinstall=true
+                fi
+            else
+                log_success "✓ Sous-répertoire présent: $dir"
+            fi
+        done
+    fi
+    
+    # ========================================================================
+    # Check 2: Service user and groups
+    # ========================================================================
+    log_info "Vérification de l'utilisateur système..."
+    
+    if ! id "$SERVICE_USER" > /dev/null 2>&1; then
+        log_warning "✗ Utilisateur '$SERVICE_USER' absent"
+        ((issues_found++))
+        
+        log_info "  → Création de l'utilisateur et des groupes..."
+        create_user_and_groups
+        ((issues_fixed++))
+    else
+        log_success "✓ Utilisateur '$SERVICE_USER' présent"
+        
+        # Check group memberships
+        local groups_to_check=(video audio gpio i2c spi)
+        for grp in "${groups_to_check[@]}"; do
+            if getent group "$grp" > /dev/null 2>&1; then
+                if ! groups "$SERVICE_USER" 2>/dev/null | grep -qw "$grp"; then
+                    log_warning "✗ Utilisateur non membre du groupe '$grp'"
+                    ((issues_found++))
+                    
+                    log_info "  → Ajout au groupe '$grp'..."
+                    usermod -aG "$grp" "$SERVICE_USER"
+                    ((issues_fixed++))
+                fi
+            fi
+        done
+    fi
+    
+    # ========================================================================
+    # Check 3: Python virtual environment
+    # ========================================================================
+    log_info "Vérification de l'environnement Python..."
+    
+    if [[ ! -d "$VENV_DIR" ]]; then
+        log_warning "✗ Environnement virtuel absent"
+        ((issues_found++))
+        
+        if [[ -d "$INSTALL_DIR/backend" ]]; then
+            log_info "  → Recréation de l'environnement virtuel..."
+            setup_python_environment
+            ((issues_fixed++))
+        else
+            needs_reinstall=true
+        fi
+    elif [[ ! -f "$VENV_DIR/bin/python" ]]; then
+        log_warning "✗ Python non trouvé dans l'environnement virtuel"
+        ((issues_found++))
+        
+        log_info "  → Recréation de l'environnement virtuel..."
+        rm -rf "$VENV_DIR"
+        setup_python_environment
+        ((issues_fixed++))
+    else
+        log_success "✓ Environnement Python présent"
+        
+        # Check if requirements are installed
+        if [[ -f "$INSTALL_DIR/requirements.txt" ]]; then
+            log_info "  Vérification des dépendances Python..."
+            if ! "$VENV_DIR/bin/pip" check > /dev/null 2>&1; then
+                log_warning "✗ Dépendances Python incomplètes"
+                ((issues_found++))
+                
+                log_info "  → Réinstallation des dépendances..."
+                "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt" > /dev/null 2>&1
+                ((issues_fixed++))
+            else
+                log_success "✓ Dépendances Python OK"
+            fi
+        fi
+    fi
+    
+    # ========================================================================
+    # Check 4: Systemd service
+    # ========================================================================
+    log_info "Vérification du service systemd..."
+    
+    local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
+    
+    if [[ ! -f "$service_file" ]]; then
+        log_warning "✗ Fichier service systemd absent"
+        ((issues_found++))
+        
+        if [[ -d "$INSTALL_DIR/backend" ]]; then
+            log_info "  → Recréation du service systemd..."
+            create_systemd_service
+            ((issues_fixed++))
+        else
+            needs_reinstall=true
+        fi
+    else
+        log_success "✓ Service systemd présent"
+        
+        # Check if service is enabled
+        if ! systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+            log_warning "✗ Service non activé au démarrage"
+            ((issues_found++))
+            
+            log_info "  → Activation du service..."
+            systemctl enable "$SERVICE_NAME"
+            ((issues_fixed++))
+        else
+            log_success "✓ Service activé au démarrage"
+        fi
+    fi
+    
+    # ========================================================================
+    # Check 5: Permissions
+    # ========================================================================
+    log_info "Vérification des permissions..."
+    
+    if [[ -d "$INSTALL_DIR" ]]; then
+        local owner
+        owner=$(stat -c '%U' "$INSTALL_DIR" 2>/dev/null)
+        
+        if [[ "$owner" != "$SERVICE_USER" ]]; then
+            log_warning "✗ Propriétaire incorrect: $owner (attendu: $SERVICE_USER)"
+            ((issues_found++))
+            
+            log_info "  → Correction des permissions..."
+            set_permissions
+            ((issues_fixed++))
+        else
+            log_success "✓ Permissions correctes"
+        fi
+    fi
+    
+    # ========================================================================
+    # Check 6: Configuration files
+    # ========================================================================
+    log_info "Vérification de la configuration..."
+    
+    local config_file="$INSTALL_DIR/config/motion_frontend.json"
+    
+    if [[ ! -f "$config_file" ]]; then
+        log_warning "✗ Fichier de configuration absent"
+        ((issues_found++))
+        
+        log_info "  → Création de la configuration par défaut..."
+        setup_configuration
+        set_permissions
+        ((issues_fixed++))
+    else
+        log_success "✓ Fichier de configuration présent"
+        
+        # Check Meeting configuration (without burning token)
+        check_meeting_config_repair
+    fi
+    
+    # ========================================================================
+    # Check 7: Log directory permissions
+    # ========================================================================
+    log_info "Vérification du répertoire de logs..."
+    
+    if [[ -d "$INSTALL_DIR/logs" ]]; then
+        if [[ ! -w "$INSTALL_DIR/logs" ]] || [[ $(stat -c '%U' "$INSTALL_DIR/logs") != "$SERVICE_USER" ]]; then
+            log_warning "✗ Permissions du répertoire logs incorrectes"
+            ((issues_found++))
+            
+            log_info "  → Correction des permissions logs..."
+            chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/logs"
+            chmod -R 755 "$INSTALL_DIR/logs"
+            ((issues_fixed++))
+        else
+            log_success "✓ Répertoire de logs OK"
+        fi
+    fi
+    
+    # ========================================================================
+    # Summary and actions
+    # ========================================================================
+    echo ""
+    echo "─────────────────────────────────────────────────────────────────────"
+    echo ""
+    
+    if [[ "$needs_reinstall" == true ]]; then
+        log_error "L'installation est trop endommagée pour être réparée."
+        echo ""
+        if confirm "Voulez-vous réinstaller Motion Frontend?" "y"; then
+            echo ""
+            # Preserve config if possible
+            local backup_dir="/tmp/motion-frontend-config-backup-$(date +%Y%m%d%H%M%S)"
+            if [[ -d "$INSTALL_DIR/config" ]]; then
+                log_info "Sauvegarde de la configuration..."
+                mkdir -p "$backup_dir"
+                cp -r "$INSTALL_DIR/config"/* "$backup_dir/" 2>/dev/null || true
+            fi
+            
+            # Clean and reinstall
+            rm -rf "$INSTALL_DIR"
+            SKIP_MEETING_CONFIG=true  # Don't ask for Meeting config, don't burn token
+            install
+            
+            # Restore config
+            if [[ -d "$backup_dir" ]]; then
+                log_info "Restauration de la configuration..."
+                cp -r "$backup_dir"/* "$INSTALL_DIR/config/"
+                rm -rf "$backup_dir"
+                set_permissions
+            fi
+        else
+            log_info "Réparation annulée"
+            exit 1
+        fi
+    elif [[ $issues_found -eq 0 ]]; then
+        log_success "Aucun problème détecté - L'installation est saine"
+    else
+        echo -e "${CYAN}Résumé:${NC}"
+        echo "  - Problèmes détectés: $issues_found"
+        echo "  - Problèmes corrigés: $issues_fixed"
+        
+        if [[ $issues_fixed -gt 0 ]]; then
+            echo ""
+            log_success "Réparation terminée"
+            
+            # Restart service if it was running
+            if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+                log_info "Redémarrage du service..."
+                systemctl restart "$SERVICE_NAME"
+            elif confirm "Voulez-vous démarrer le service?" "y"; then
+                start_service
+            fi
+        fi
+    fi
+}
+
+# Check Meeting config during repair (without burning token)
+check_meeting_config_repair() {
+    local config_file="$INSTALL_DIR/config/motion_frontend.json"
+    
+    if [[ ! -f "$config_file" ]]; then
+        return
+    fi
+    
+    # Extract meeting config using grep (works without jq)
+    local device_key
+    device_key=$(grep -o '"device_key"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | sed 's/.*:.*"\([^"]*\)"/\1/')
+    
+    if [[ -z "$device_key" ]]; then
+        log_warning "✗ Configuration Meeting: Device Key absente"
+        echo ""
+        echo -e "${YELLOW}Le service Meeting n'est pas configuré.${NC}"
+        
+        if confirm "Voulez-vous configurer le service Meeting maintenant?" "n"; then
+            # Configure Meeting but DON'T burn token during repair
+            echo ""
+            echo -e "${CYAN}Configuration Meeting (mode réparation - pas de consommation de token)${NC}"
+            echo ""
+            
+            read -r -p "Device Key: " input_device_key
+            if [[ -n "$input_device_key" ]]; then
+                read -r -p "Token Code: " input_token
+                
+                if [[ -n "$input_token" ]]; then
+                    # Validate credentials without burning token
+                    log_info "Vérification des credentials (sans consommation de token)..."
+                    
+                    local api_url="${MEETING_SERVER_URL}/api/devices/${input_device_key}"
+                    local response
+                    response=$(curl -sSL -w "\n%{http_code}" "$api_url" 2>/dev/null)
+                    
+                    local http_code
+                    http_code=$(echo "$response" | tail -n 1)
+                    local body
+                    body=$(echo "$response" | sed '$d')
+                    
+                    if [[ "$http_code" == "200" ]]; then
+                        # Verify token matches
+                        local stored_token
+                        stored_token=$(echo "$body" | grep -o '"token_code"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:.*"\([^"]*\)"/\1/')
+                        
+                        if [[ "$stored_token" == "$input_token" ]]; then
+                            log_success "✓ Credentials validés"
+                            
+                            # Update config file
+                            MEETING_DEVICE_KEY="$input_device_key"
+                            MEETING_TOKEN_CODE="$input_token"
+                            update_meeting_config "$config_file"
+                            
+                            log_success "Configuration Meeting mise à jour"
+                        else
+                            log_error "✗ Token Code invalide"
+                        fi
+                    else
+                        log_error "✗ Device Key non trouvée sur le serveur Meeting"
+                    fi
+                fi
+            fi
+        fi
+    else
+        log_success "✓ Configuration Meeting présente (Device Key: ${device_key:0:8}...)"
+    fi
+}
+
+# ============================================================================
 # Main installation
 # ============================================================================
 
@@ -1077,6 +1411,7 @@ show_help() {
     echo "  --branch, -b            Affiche un menu pour choisir la branche à installer"
     echo "  --uninstall, -u         Désinstalle Motion Frontend"
     echo "  --update                Met à jour l'installation existante"
+    echo "  --repair                Vérifie et répare l'installation"
     echo ""
     echo "Configuration Meeting:"
     echo "  --device-key KEY        Device Key pour le service Meeting (obligatoire avec --token)"
@@ -1100,6 +1435,9 @@ show_help() {
     echo ""
     echo "  Installation sans Meeting:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --skip-meeting"
+    echo ""
+    echo "  Réparation:"
+    echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --repair"
     echo ""
     echo "  Désinstallation:"
     echo "    curl -sSL https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/scripts/install_motion_frontend.sh | sudo bash -s -- --uninstall"
@@ -1133,6 +1471,10 @@ main() {
                 ;;
             --update)
                 action="update"
+                shift
+                ;;
+            --repair)
+                action="repair"
                 shift
                 ;;
             --device-key)
@@ -1170,6 +1512,10 @@ main() {
                 select_branch
             fi
             update
+            ;;
+        repair)
+            check_root
+            repair
             ;;
     esac
 }

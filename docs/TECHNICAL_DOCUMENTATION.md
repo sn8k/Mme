@@ -1,7 +1,7 @@
-<!-- File Version: 1.18.0 -->
+<!-- File Version: 1.19.0 -->
 # Motion Frontend - Documentation Technique Complète
 
-> **Version** : 0.30.0  
+> **Version** : 0.32.0  
 > **Date de mise à jour** : 29 décembre 2025  
 > **Plateformes cibles** : Windows (développement), Raspberry Pi OS Debian Trixie (production)
 
@@ -103,7 +103,7 @@ MmE/
 │   └── manifest.json          # PWA manifest
 │
 ├── scripts/                    # Scripts d'automatisation
-│   ├── install_motion_frontend.sh    # Installeur Raspberry Pi OS (v1.0.0)
+│   ├── install_motion_frontend.sh    # Installeur Raspberry Pi OS (v1.3.0)
 │   ├── install_motion_frontend.ps1   # Installeur Windows
 │   └── run_motion_frontend.ps1       # Lanceur développement
 │
@@ -1337,7 +1337,31 @@ curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion
 curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --update --branch
 ```
 
-#### 8.1.5 Options de ligne de commande
+#### 8.1.5 Réparation
+
+```bash
+# Vérifie et répare l'installation existante
+curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion_frontend.sh | sudo bash -s -- --repair
+```
+
+La fonction de réparation effectue les vérifications suivantes :
+- **Répertoires** : Vérifie la présence de `/opt/motion-frontend` et ses sous-répertoires (backend, static, templates, config, logs)
+- **Utilisateur système** : Vérifie que l'utilisateur `motion-frontend` existe et appartient aux groupes requis
+- **Environnement Python** : Vérifie l'environnement virtuel et les dépendances installées
+- **Service systemd** : Vérifie que le service existe et est activé au démarrage
+- **Permissions** : Vérifie les propriétaires et droits d'accès des fichiers
+- **Configuration** : Vérifie la présence des fichiers de configuration
+
+Actions automatiques :
+- Création des répertoires manquants (config, logs)
+- Ajout de l'utilisateur aux groupes manquants
+- Réinstallation des dépendances Python si nécessaire
+- Recréation du service systemd si absent
+- Correction des permissions
+
+**Important** : La réparation ne consomme pas de token Meeting. Si la configuration Meeting est absente, elle peut être ajoutée interactivement mais sans validation brûlant un token.
+
+#### 8.1.6 Options de ligne de commande
 
 | Option | Description |
 |--------|-------------|
@@ -1345,8 +1369,12 @@ curl -sSL https://raw.githubusercontent.com/sn8k/Mme/main/scripts/install_motion
 | `--branch`, `-b` | Menu de sélection de branche |
 | `--uninstall`, `-u` | Désinstalle le projet |
 | `--update` | Met à jour l'installation existante |
+| `--repair` | Vérifie et répare l'installation |
+| `--device-key KEY` | Device Key pour le service Meeting |
+| `--token TOKEN` | Token code pour le service Meeting |
+| `--skip-meeting` | Ne pas configurer le service Meeting |
 
-#### 8.1.6 Fonctionnement détaillé
+#### 8.1.7 Fonctionnement détaillé
 
 **Étapes d'installation** :
 1. Vérification système (Linux/Debian, architecture, Raspberry Pi)
